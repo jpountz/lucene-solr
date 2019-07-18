@@ -376,6 +376,25 @@ public class BKDWriter implements Closeable {
     }
   }
 
+  private void computePackedValueBounds(MutablePointValues values, int from, int to,
+      byte[] minPackedValue, byte[] maxPackedValue,
+      BytesRef scratch) {
+    Arrays.fill(minPackedValue, (byte) 0xff);
+    Arrays.fill(maxPackedValue, (byte) 0);
+    for (int i = from; i < to; ++i) {
+      values.getValue(i, scratch);
+      for(int dim=0;dim<numIndexDims;dim++) {
+        int offset = dim*bytesPerDim;
+        if (Arrays.compareUnsigned(scratch.bytes, scratch.offset + offset, scratch.offset + offset + bytesPerDim, minPackedValue, offset, offset + bytesPerDim) < 0) {
+          System.arraycopy(scratch.bytes, scratch.offset + offset, minPackedValue, offset, bytesPerDim);
+        }
+        if (Arrays.compareUnsigned(scratch.bytes, scratch.offset + offset, scratch.offset + offset + bytesPerDim, maxPackedValue, offset, offset + bytesPerDim) > 0) {
+          System.arraycopy(scratch.bytes, scratch.offset + offset, maxPackedValue, offset, bytesPerDim);
+        }
+      }
+    }
+  }
+
   /* In the 2+D case, we recursively pick the split dimension, compute the
    * median value and partition other values around it. */
   private long writeFieldNDims(IndexOutput out, String fieldName, MutablePointValues values) throws IOException {
@@ -407,20 +426,8 @@ public class BKDWriter implements Closeable {
     final long[] leafBlockFPs = new long[numLeaves];
 
     // compute the min/max for this slice
-    Arrays.fill(minPackedValue, (byte) 0xff);
-    Arrays.fill(maxPackedValue, (byte) 0);
+    computePackedValueBounds(values, 0, Math.toIntExact(pointCount), minPackedValue, maxPackedValue, scratchBytesRef1);
     for (int i = 0; i < Math.toIntExact(pointCount); ++i) {
-      values.getValue(i, scratchBytesRef1);
-      for(int dim=0;dim<numIndexDims;dim++) {
-        int offset = dim*bytesPerDim;
-        if (Arrays.compareUnsigned(scratchBytesRef1.bytes, scratchBytesRef1.offset + offset, scratchBytesRef1.offset + offset + bytesPerDim, minPackedValue, offset, offset + bytesPerDim) < 0) {
-          System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + offset, minPackedValue, offset, bytesPerDim);
-        }
-        if (Arrays.compareUnsigned(scratchBytesRef1.bytes, scratchBytesRef1.offset + offset, scratchBytesRef1.offset + offset + bytesPerDim, maxPackedValue, offset, offset + bytesPerDim) > 0) {
-          System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + offset, maxPackedValue, offset, bytesPerDim);
-        }
-      }
-
       docsSeen.set(values.getDocID(i));
     }
 
@@ -1261,22 +1268,33 @@ public class BKDWriter implements Closeable {
     for (int numSplits : parentSplits) {
       maxNumSplits = Math.max(maxNumSplits, numSplits);
     }
-    for (int dim = 0; dim < numIndexDims; ++dim) {
-      final int offset = dim * bytesPerDim;
-      if (parentSplits[dim] < maxNumSplits / 2 &&
-          Arrays.compareUnsigned(minPackedValue, offset, offset + bytesPerDim, maxPackedValue, offset, offset + bytesPerDim) != 0) {
-        return dim;
-      }
-    }
 
     // Find which dim has the largest span so we can split on it:
     int splitDim = -1;
+    int splitDimNumSplits = -1;
     for(int dim=0;dim<numIndexDims;dim++) {
+      final int offset = dim * bytesPerDim;
+
+      if (Arrays.equals(minPackedValue, offset, offset+bytesPerDim, maxPackedValue, offset, offset+bytesPerDim)) {
+        // No need to index dimensions that only have equal values
+        continue;
+      }
+
       NumericUtils.subtract(bytesPerDim, dim, maxPackedValue, minPackedValue, scratchDiff);
-      if (splitDim == -1 || Arrays.compareUnsigned(scratchDiff, 0, bytesPerDim, scratch1, 0, bytesPerDim) > 0) {
+      if (splitDim == -1 ||
+          // Dimensions that have 2x fewer splits than the max number of splits always get preferred.
+          // This helps ensure that all dimensions get indexed.
+          (splitDimNumSplits >= maxNumSplits / 2 && parentSplits[dim] < maxNumSplits / 2) ||
+          Arrays.compareUnsigned(scratchDiff, 0, bytesPerDim, scratch1, 0, bytesPerDim) > 0) {
         System.arraycopy(scratchDiff, 0, scratch1, 0, bytesPerDim);
         splitDim = dim;
+        splitDimNumSplits = parentSplits[dim];
       }
+    }
+
+    if (splitDim == -1) {
+      // All dimensions have equal values
+      splitDim = 0;
     }
 
     //System.out.println("SPLIT: " + splitDim);
@@ -1438,22 +1456,44 @@ public class BKDWriter implements Closeable {
       reader.getValue(mid, scratchBytesRef1);
       System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + splitDim * bytesPerDim, splitPackedValues, address + 1, bytesPerDim);
 
-      byte[] minSplitPackedValue = ArrayUtil.copyOfSubArray(minPackedValue, 0, packedIndexBytesLength);
-      byte[] maxSplitPackedValue = ArrayUtil.copyOfSubArray(maxPackedValue, 0, packedIndexBytesLength);
-      System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + splitDim * bytesPerDim,
-          minSplitPackedValue, splitDim * bytesPerDim, bytesPerDim);
-      System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + splitDim * bytesPerDim,
-          maxSplitPackedValue, splitDim * bytesPerDim, bytesPerDim);
-
       // recurse
       parentSplits[splitDim]++;
+
+      // We re-compute bounds since splitting might also have affected the range of values in other dimensions
+      byte[] minLeftPackedValue = new byte[packedIndexBytesLength];
+      byte[] maxLeftPackedValue = new byte[packedIndexBytesLength];
+      computePackedValueBounds(reader, from, mid, minLeftPackedValue, maxLeftPackedValue, scratchBytesRef1);
       build(nodeID * 2, leafNodeOffset, reader, from, mid, out,
-          minPackedValue, maxSplitPackedValue, parentSplits,
+          minLeftPackedValue, maxLeftPackedValue, parentSplits,
           splitPackedValues, leafBlockFPs, spareDocIds);
+
+      byte[] minRightPackedValue = new byte[packedIndexBytesLength];
+      byte[] maxRightPackedValue = new byte[packedIndexBytesLength];
+      computePackedValueBounds(reader, mid, to, minRightPackedValue, maxRightPackedValue, scratchBytesRef1);
       build(nodeID * 2 + 1, leafNodeOffset, reader, mid, to, out,
-          minSplitPackedValue, maxPackedValue, parentSplits,
+          minRightPackedValue, maxRightPackedValue, parentSplits,
           splitPackedValues, leafBlockFPs, spareDocIds);
+
       parentSplits[splitDim]--;
+    }
+  }
+
+  private void computePackedValueBounds(BKDRadixSelector.PathSlice slice, byte[] minPackedValue, byte[] maxPackedValue) throws IOException {
+    try (PointReader reader = slice.writer.getReader(slice.start, slice.count)) {
+      Arrays.fill(minPackedValue, (byte) 0xff);
+      Arrays.fill(maxPackedValue, (byte) 0);
+      while (reader.next()) {
+        BytesRef value = reader.pointValue().packedValue();
+        for(int dim=0;dim<numIndexDims;dim++) {
+          int offset = dim*bytesPerDim;
+          if (Arrays.compareUnsigned(value.bytes, value.offset + offset, value.offset + offset + bytesPerDim, minPackedValue, offset, offset + bytesPerDim) < 0) {
+            System.arraycopy(value.bytes, value.offset + offset, minPackedValue, offset, bytesPerDim);
+          }
+          if (Arrays.compareUnsigned(value.bytes, value.offset + offset, value.offset + offset + bytesPerDim, maxPackedValue, offset, offset + bytesPerDim) > 0) {
+            System.arraycopy(value.bytes, value.offset + offset, maxPackedValue, offset, bytesPerDim);
+          }
+        }
+      }
     }
   }
 
@@ -1590,24 +1630,21 @@ public class BKDWriter implements Closeable {
       splitPackedValues[address] = (byte) splitDim;
       System.arraycopy(splitValue, 0, splitPackedValues, address + 1, bytesPerDim);
 
-      byte[] minSplitPackedValue = new byte[packedIndexBytesLength];
-      System.arraycopy(minPackedValue, 0, minSplitPackedValue, 0, packedIndexBytesLength);
-
-      byte[] maxSplitPackedValue = new byte[packedIndexBytesLength];
-      System.arraycopy(maxPackedValue, 0, maxSplitPackedValue, 0, packedIndexBytesLength);
-
-      System.arraycopy(splitValue, 0, minSplitPackedValue, splitDim * bytesPerDim, bytesPerDim);
-      System.arraycopy(splitValue, 0, maxSplitPackedValue, splitDim * bytesPerDim, bytesPerDim);
-
       parentSplits[splitDim]++;
       // Recurse on left tree:
+      byte[] minLeftPackedValue = new byte[packedIndexBytesLength];
+      byte[] maxLeftPackedValue = new byte[packedIndexBytesLength];
+      computePackedValueBounds(slices[0], minLeftPackedValue, maxLeftPackedValue);
       build(2 * nodeID, leafNodeOffset, slices[0],
-          out, radixSelector, minPackedValue, maxSplitPackedValue,
+          out, radixSelector, minLeftPackedValue, maxLeftPackedValue,
           parentSplits, splitPackedValues, leafBlockFPs, spareDocIds);
 
       // Recurse on right tree:
+      byte[] minRightPackedValue = new byte[packedIndexBytesLength];
+      byte[] maxRightPackedValue = new byte[packedIndexBytesLength];
+      computePackedValueBounds(slices[1], minRightPackedValue, maxRightPackedValue);
       build(2 * nodeID + 1, leafNodeOffset, slices[1],
-          out, radixSelector, minSplitPackedValue, maxPackedValue
+          out, radixSelector, minRightPackedValue, maxRightPackedValue
           , parentSplits, splitPackedValues, leafBlockFPs, spareDocIds);
 
       parentSplits[splitDim]--;
