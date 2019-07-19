@@ -26,7 +26,6 @@ import org.apache.lucene.geo.Rectangle;
 import org.apache.lucene.index.PointValues.IntersectVisitor;
 import org.apache.lucene.index.PointValues.Relation;
 import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.SloppyMath;
 import org.apache.lucene.util.bkd.BKDReader.IndexTree;
 import org.apache.lucene.util.bkd.BKDReader.IntersectState;
@@ -268,24 +267,16 @@ class NearestNeighbor {
           continue;
         }
         
-        BytesRef splitValue = BytesRef.deepCopyOf(cell.index.getSplitDimValue());
-        int splitDim = cell.index.getSplitDim();
-        
         // we must clone the index so that we we can recurse left and right "concurrently":
         IndexTree newIndex = cell.index.clone();
-        byte[] splitPackedValue = cell.maxPacked.clone();
-        System.arraycopy(splitValue.bytes, splitValue.offset, splitPackedValue, splitDim*bytesPerDim, bytesPerDim);
 
         cell.index.pushLeft();
-        cellQueue.offer(new Cell(cell.index, cell.readerIndex, cell.minPacked, splitPackedValue,
-                                 approxBestDistance(cell.minPacked, splitPackedValue, pointLat, pointLon)));
-
-        splitPackedValue = cell.minPacked.clone();
-        System.arraycopy(splitValue.bytes, splitValue.offset, splitPackedValue, splitDim*bytesPerDim, bytesPerDim);
+        cellQueue.offer(new Cell(cell.index, cell.readerIndex, cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(),
+                                 approxBestDistance(cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(), pointLat, pointLon)));
 
         newIndex.pushRight();
-        cellQueue.offer(new Cell(newIndex, cell.readerIndex, splitPackedValue, cell.maxPacked,
-                                 approxBestDistance(splitPackedValue, cell.maxPacked, pointLat, pointLon)));
+        cellQueue.offer(new Cell(newIndex, cell.readerIndex, cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(),
+                                 approxBestDistance(cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(), pointLat, pointLon)));
       }
     }
 

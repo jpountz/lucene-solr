@@ -422,7 +422,7 @@ public class BKDWriter implements Closeable {
 
     checkMaxLeafNodeCount(numLeaves);
 
-    final byte[] splitPackedValues = new byte[numLeaves * (bytesPerDim + 1)];
+    final byte[] nodeBounds = new byte[numLeaves * packedIndexBytesLength * 4];
     final long[] leafBlockFPs = new long[numLeaves];
 
     // compute the min/max for this slice
@@ -434,12 +434,12 @@ public class BKDWriter implements Closeable {
     final int[] parentSplits = new int[numIndexDims];
     build(1, numLeaves, values, 0, Math.toIntExact(pointCount), out,
           minPackedValue, maxPackedValue, parentSplits,
-          splitPackedValues, leafBlockFPs,
+          nodeBounds, leafBlockFPs,
           new int[maxPointsInLeafNode]);
     assert Arrays.equals(parentSplits, new int[numIndexDims]);
 
     long indexFP = out.getFilePointer();
-    writeIndex(out, Math.toIntExact(countPerLeaf), leafBlockFPs, splitPackedValues);
+    writeIndex(out, Math.toIntExact(countPerLeaf), leafBlockFPs, nodeBounds);
     return indexFP;
   }
 
@@ -475,6 +475,7 @@ public class BKDWriter implements Closeable {
    *  sorted values and currently only works when numDims==1.  This returns -1 if all documents containing
    *  dimensional values were deleted. */
   public long merge(IndexOutput out, List<MergeState.DocMap> docMaps, List<BKDReader> readers) throws IOException {
+    if (true) throw new AssertionError();
     assert docMaps == null || readers.size() == docMaps.size();
 
     BKDMergeQueue queue = new BKDMergeQueue(bytesPerDim, readers.size());
@@ -597,7 +598,7 @@ public class BKDWriter implements Closeable {
 
       //System.out.println("BKDW: now rotate numInnerNodes=" + numInnerNodes + " leafBlockStarts=" + leafBlockStartValues.size());
 
-      byte[] index = new byte[(1+numInnerNodes) * (1+bytesPerDim)];
+      byte[] index = new byte[(1+numInnerNodes) * 4 * bytesPerDim];
       rotateToTree(1, 0, numInnerNodes, index, leafBlockStartValues);
       long[] arr = new long[leafBlockFPs.size()];
       for(int i=0;i<leafBlockFPs.size();i++) {
@@ -772,7 +773,7 @@ public class BKDWriter implements Closeable {
     // step of the recursion to recompute the split dim:
 
     // Indexed by nodeID, but first (root) nodeID is 1.  We do 1+ because the lead byte at each recursion says which dim we split on.
-    byte[] splitPackedValues = new byte[Math.toIntExact(numLeaves*(1+bytesPerDim))];
+    byte[] nodeBounds = new byte[Math.toIntExact(numLeaves*4*packedIndexBytesLength)];
 
     // +1 because leaf count is power of 2 (e.g. 8), and innerNodeCount is power of 2 minus 1 (e.g. 7)
     long[] leafBlockFPs = new long[numLeaves];
@@ -791,7 +792,7 @@ public class BKDWriter implements Closeable {
              out, radixSelector,
             minPackedValue, maxPackedValue,
             parentSplits,
-            splitPackedValues,
+            nodeBounds,
             leafBlockFPs,
             new int[maxPointsInLeafNode]);
       assert Arrays.equals(parentSplits, new int[numIndexDims]);
@@ -812,229 +813,31 @@ public class BKDWriter implements Closeable {
 
     // Write index:
     long indexFP = out.getFilePointer();
-    writeIndex(out, Math.toIntExact(countPerLeaf), leafBlockFPs, splitPackedValues);
+    writeIndex(out, Math.toIntExact(countPerLeaf), leafBlockFPs, nodeBounds);
     return indexFP;
   }
 
-  /** Packs the two arrays, representing a balanced binary tree, into a compact byte[] structure. */
-  private byte[] packIndex(long[] leafBlockFPs, byte[] splitPackedValues) throws IOException {
-
-    int numLeaves = leafBlockFPs.length;
-
-    // Possibly rotate the leaf block FPs, if the index not fully balanced binary tree (only happens
-    // if it was created by OneDimensionBKDWriter).  In this case the leaf nodes may straddle the two bottom
-    // levels of the binary tree:
-    if (numIndexDims == 1 && numLeaves > 1) {
-      int levelCount = 2;
-      while (true) {
-        if (numLeaves >= levelCount && numLeaves <= 2*levelCount) {
-          int lastLevel = 2*(numLeaves - levelCount);
-          assert lastLevel >= 0;
-          if (lastLevel != 0) {
-            // Last level is partially filled, so we must rotate the leaf FPs to match.  We do this here, after loading
-            // at read-time, so that we can still delta code them on disk at write:
-            long[] newLeafBlockFPs = new long[numLeaves];
-            System.arraycopy(leafBlockFPs, lastLevel, newLeafBlockFPs, 0, leafBlockFPs.length - lastLevel);
-            System.arraycopy(leafBlockFPs, 0, newLeafBlockFPs, leafBlockFPs.length - lastLevel, lastLevel);
-            leafBlockFPs = newLeafBlockFPs;
-          }
-          break;
-        }
-
-        levelCount *= 2;
-      }
-    }
-
-    /** Reused while packing the index */
-    ByteBuffersDataOutput writeBuffer = ByteBuffersDataOutput.newResettableInstance();
-
-    // This is the "file" we append the byte[] to:
-    List<byte[]> blocks = new ArrayList<>();
-    byte[] lastSplitValues = new byte[bytesPerDim * numIndexDims];
-    //System.out.println("\npack index");
-    int totalSize = recursePackIndex(writeBuffer, leafBlockFPs, splitPackedValues, 0l, blocks, 1, lastSplitValues, new boolean[numIndexDims], false);
-
-    // Compact the byte[] blocks into single byte index:
-    byte[] index = new byte[totalSize];
-    int upto = 0;
-    for(byte[] block : blocks) {
-      System.arraycopy(block, 0, index, upto, block.length);
-      upto += block.length;
-    }
-    assert upto == totalSize;
-
-    return index;
-  }
-
-  /** Appends the current contents of writeBuffer as another block on the growing in-memory file */
-  private int appendBlock(ByteBuffersDataOutput writeBuffer, List<byte[]> blocks) throws IOException {
-    byte[] block = writeBuffer.toArrayCopy();
-    blocks.add(block);
-    writeBuffer.reset();
-    return block.length;
-  }
-
-  /**
-   * lastSplitValues is per-dimension split value previously seen; we use this to prefix-code the split byte[] on each inner node
-   */
-  private int recursePackIndex(ByteBuffersDataOutput writeBuffer, long[] leafBlockFPs, byte[] splitPackedValues, long minBlockFP, List<byte[]> blocks,
-                               int nodeID, byte[] lastSplitValues, boolean[] negativeDeltas, boolean isLeft) throws IOException {
-    if (nodeID >= leafBlockFPs.length) {
-      int leafID = nodeID - leafBlockFPs.length;
-      //System.out.println("recursePack leaf nodeID=" + nodeID);
-
-      // In the unbalanced case it's possible the left most node only has one child:
-      if (leafID < leafBlockFPs.length) {
-        long delta = leafBlockFPs[leafID] - minBlockFP;
-        if (isLeft) {
-          assert delta == 0;
-          return 0;
-        } else {
-          assert nodeID == 1 || delta > 0: "nodeID=" + nodeID;
-          writeBuffer.writeVLong(delta);
-          return appendBlock(writeBuffer, blocks);
-        }
-      } else {
-        return 0;
-      }
-    } else {
-      long leftBlockFP;
-      if (isLeft == false) {
-        leftBlockFP = getLeftMostLeafBlockFP(leafBlockFPs, nodeID);
-        long delta = leftBlockFP - minBlockFP;
-        assert nodeID == 1 || delta > 0 : "expected nodeID=1 or delta > 0; got nodeID=" + nodeID + " and delta=" + delta;
-        writeBuffer.writeVLong(delta);
-      } else {
-        // The left tree's left most leaf block FP is always the minimal FP:
-        leftBlockFP = minBlockFP;
-      }
-
-      int address = nodeID * (1+bytesPerDim);
-      int splitDim = splitPackedValues[address++] & 0xff;
-
-      //System.out.println("recursePack inner nodeID=" + nodeID + " splitDim=" + splitDim + " splitValue=" + new BytesRef(splitPackedValues, address, bytesPerDim));
-
-      // find common prefix with last split value in this dim:
-      int prefix = Arrays.mismatch(splitPackedValues, address, address + bytesPerDim, lastSplitValues,
-          splitDim * bytesPerDim, splitDim * bytesPerDim + bytesPerDim);
-      if (prefix == -1) {
-        prefix = bytesPerDim;
-      }
-
-      //System.out.println("writeNodeData nodeID=" + nodeID + " splitDim=" + splitDim + " numDims=" + numDims + " bytesPerDim=" + bytesPerDim + " prefix=" + prefix);
-
-      int firstDiffByteDelta;
-      if (prefix < bytesPerDim) {
-        //System.out.println("  delta byte cur=" + Integer.toHexString(splitPackedValues[address+prefix]&0xFF) + " prev=" + Integer.toHexString(lastSplitValues[splitDim * bytesPerDim + prefix]&0xFF) + " negated?=" + negativeDeltas[splitDim]);
-        firstDiffByteDelta = (splitPackedValues[address+prefix]&0xFF) - (lastSplitValues[splitDim * bytesPerDim + prefix]&0xFF);
-        if (negativeDeltas[splitDim]) {
-          firstDiffByteDelta = -firstDiffByteDelta;
-        }
-        //System.out.println("  delta=" + firstDiffByteDelta);
-        assert firstDiffByteDelta > 0;
-      } else {
-        firstDiffByteDelta = 0;
-      }
-
-      // pack the prefix, splitDim and delta first diff byte into a single vInt:
-      int code = (firstDiffByteDelta * (1+bytesPerDim) + prefix) * numIndexDims + splitDim;
-
-      //System.out.println("  code=" + code);
-      //System.out.println("  splitValue=" + new BytesRef(splitPackedValues, address, bytesPerDim));
-
-      writeBuffer.writeVInt(code);
-
-      // write the split value, prefix coded vs. our parent's split value:
-      int suffix = bytesPerDim - prefix;
-      byte[] savSplitValue = new byte[suffix];
-      if (suffix > 1) {
-        writeBuffer.writeBytes(splitPackedValues, address+prefix+1, suffix-1);
-      }
-
-      byte[] cmp = lastSplitValues.clone();
-
-      System.arraycopy(lastSplitValues, splitDim * bytesPerDim + prefix, savSplitValue, 0, suffix);
-
-      // copy our split value into lastSplitValues for our children to prefix-code against
-      System.arraycopy(splitPackedValues, address+prefix, lastSplitValues, splitDim * bytesPerDim + prefix, suffix);
-
-      int numBytes = appendBlock(writeBuffer, blocks);
-
-      // placeholder for left-tree numBytes; we need this so that at search time if we only need to recurse into the right sub-tree we can
-      // quickly seek to its starting point
-      int idxSav = blocks.size();
-      blocks.add(null);
-
-      boolean savNegativeDelta = negativeDeltas[splitDim];
-      negativeDeltas[splitDim] = true;
-
-      int leftNumBytes = recursePackIndex(writeBuffer, leafBlockFPs, splitPackedValues, leftBlockFP, blocks, 2*nodeID, lastSplitValues, negativeDeltas, true);
-
-      if (nodeID * 2 < leafBlockFPs.length) {
-        writeBuffer.writeVInt(leftNumBytes);
-      } else {
-        assert leftNumBytes == 0: "leftNumBytes=" + leftNumBytes;
-      }
-      
-      byte[] bytes2 = writeBuffer.toArrayCopy();
-      writeBuffer.reset();
-      // replace our placeholder:
-      blocks.set(idxSav, bytes2);
-
-      negativeDeltas[splitDim] = false;
-      int rightNumBytes = recursePackIndex(writeBuffer, leafBlockFPs, splitPackedValues, leftBlockFP, blocks, 2*nodeID+1, lastSplitValues, negativeDeltas, false);
-
-      negativeDeltas[splitDim] = savNegativeDelta;
-
-      // restore lastSplitValues to what caller originally passed us:
-      System.arraycopy(savSplitValue, 0, lastSplitValues, splitDim * bytesPerDim + prefix, suffix);
-
-      assert Arrays.equals(lastSplitValues, cmp);
-      
-      return numBytes + bytes2.length + leftNumBytes + rightNumBytes;
-    }
-  }
-
-  private long getLeftMostLeafBlockFP(long[] leafBlockFPs, int nodeID) {
-    // TODO: can we do this cheaper, e.g. a closed form solution instead of while loop?  Or
-    // change the recursion while packing the index to return this left-most leaf block FP
-    // from each recursion instead?
-    //
-    // Still, the overall cost here is minor: this method's cost is O(log(N)), and while writing
-    // we call it O(N) times (N = number of leaf blocks)
-    while (nodeID < leafBlockFPs.length) {
-      nodeID *= 2;
-    }
-    int leafID = nodeID - leafBlockFPs.length;
-    long result = leafBlockFPs[leafID];
-    if (result < 0) {
-      throw new AssertionError(result + " for leaf " + leafID);
-    }
-    return result;
-  }
-
-  private void writeIndex(IndexOutput out, int countPerLeaf, long[] leafBlockFPs, byte[] splitPackedValues) throws IOException {
-    byte[] packedIndex = packIndex(leafBlockFPs, splitPackedValues);
-    writeIndex(out, countPerLeaf, leafBlockFPs.length, packedIndex);
-  }
-  
-  private void writeIndex(IndexOutput out, int countPerLeaf, int numLeaves, byte[] packedIndex) throws IOException {
-    
+  private void writeIndex(IndexOutput out, int countPerLeaf, long[] leafBlockFPs, byte[] nodeBounds) throws IOException {
+    // TODO: Pack the index
     CodecUtil.writeHeader(out, CODEC_NAME, VERSION_CURRENT);
     out.writeVInt(numDataDims);
     out.writeVInt(numIndexDims);
     out.writeVInt(countPerLeaf);
     out.writeVInt(bytesPerDim);
 
+    int numLeaves = leafBlockFPs.length;
+    assert nodeBounds.length == numLeaves * 4 * packedIndexBytesLength;
     assert numLeaves > 0;
     out.writeVInt(numLeaves);
-    out.writeBytes(minPackedValue, 0, packedIndexBytesLength);
-    out.writeBytes(maxPackedValue, 0, packedIndexBytesLength);
 
     out.writeVLong(pointCount);
     out.writeVInt(docsSeen.cardinality());
-    out.writeVInt(packedIndex.length);
-    out.writeBytes(packedIndex, 0, packedIndex.length);
+    assert nodeBounds.length == numLeaves * 4 * packedIndexBytesLength;
+    out.writeBytes(nodeBounds, 0, nodeBounds.length);
+    assert Arrays.equals(Arrays.copyOfRange(nodeBounds, 0, 2 * packedIndexBytesLength), new byte[2 * packedIndexBytesLength]);
+    for (long l : leafBlockFPs) {
+      out.writeLong(l);
+    }
   }
 
   private void writeLeafBlockDocs(DataOutput out, int[] docIDs, int start, int count) throws IOException {
@@ -1325,9 +1128,13 @@ public class BKDWriter implements Closeable {
                      IndexOutput out,
                      byte[] minPackedValue, byte[] maxPackedValue,
                      int[] parentSplits,
-                     byte[] splitPackedValues,
+                     byte[] nodeBounds,
                      long[] leafBlockFPs,
                      int[] spareDocIds) throws IOException {
+
+    final int address = nodeID * 2 * packedIndexBytesLength;
+    System.arraycopy(minPackedValue, 0, nodeBounds, address, packedIndexBytesLength);
+    System.arraycopy(maxPackedValue, 0, nodeBounds, address + packedIndexBytesLength, packedIndexBytesLength);
 
     if (nodeID >= leafNodeOffset) {
       // leaf node
@@ -1450,29 +1257,25 @@ public class BKDWriter implements Closeable {
       MutablePointsReaderUtils.partition(numDataDims, numIndexDims, maxDoc, splitDim, bytesPerDim, commonPrefixLen,
           reader, from, to, mid, scratchBytesRef1, scratchBytesRef2);
 
-      // set the split value
-      final int address = nodeID * (1+bytesPerDim);
-      splitPackedValues[address] = (byte) splitDim;
-      reader.getValue(mid, scratchBytesRef1);
-      System.arraycopy(scratchBytesRef1.bytes, scratchBytesRef1.offset + splitDim * bytesPerDim, splitPackedValues, address + 1, bytesPerDim);
-
-      // recurse
-      parentSplits[splitDim]++;
-
       // We re-compute bounds since splitting might also have affected the range of values in other dimensions
       byte[] minLeftPackedValue = new byte[packedIndexBytesLength];
       byte[] maxLeftPackedValue = new byte[packedIndexBytesLength];
       computePackedValueBounds(reader, from, mid, minLeftPackedValue, maxLeftPackedValue, scratchBytesRef1);
-      build(nodeID * 2, leafNodeOffset, reader, from, mid, out,
-          minLeftPackedValue, maxLeftPackedValue, parentSplits,
-          splitPackedValues, leafBlockFPs, spareDocIds);
 
       byte[] minRightPackedValue = new byte[packedIndexBytesLength];
       byte[] maxRightPackedValue = new byte[packedIndexBytesLength];
       computePackedValueBounds(reader, mid, to, minRightPackedValue, maxRightPackedValue, scratchBytesRef1);
+
+      // recurse
+      parentSplits[splitDim]++;
+
+      build(nodeID * 2, leafNodeOffset, reader, from, mid, out,
+          minLeftPackedValue, maxLeftPackedValue, parentSplits,
+          nodeBounds, leafBlockFPs, spareDocIds);
+
       build(nodeID * 2 + 1, leafNodeOffset, reader, mid, to, out,
           minRightPackedValue, maxRightPackedValue, parentSplits,
-          splitPackedValues, leafBlockFPs, spareDocIds);
+          nodeBounds, leafBlockFPs, spareDocIds);
 
       parentSplits[splitDim]--;
     }
@@ -1505,9 +1308,13 @@ public class BKDWriter implements Closeable {
                      BKDRadixSelector radixSelector,
                      byte[] minPackedValue, byte[] maxPackedValue,
                      int[] parentSplits,
-                     byte[] splitPackedValues,
+                     byte[] nodeBounds,
                      long[] leafBlockFPs,
                      int[] spareDocIds) throws IOException {
+
+    final int address = nodeID * 2 * packedIndexBytesLength;
+    System.arraycopy(minPackedValue, 0, nodeBounds, address, packedIndexBytesLength);
+    System.arraycopy(maxPackedValue, 0, nodeBounds, address + packedIndexBytesLength, packedIndexBytesLength);
 
     if (nodeID >= leafNodeOffset) {
 
@@ -1609,7 +1416,7 @@ public class BKDWriter implements Closeable {
         splitDim = 0;
       }
 
-      assert nodeID < splitPackedValues.length : "nodeID=" + nodeID + " splitValues.length=" + splitPackedValues.length;
+      assert nodeID < nodeBounds.length : "nodeID=" + nodeID + " splitValues.length=" + nodeBounds.length;
 
       // How many points will be in the left tree:
       long rightCount = points.count / 2;
@@ -1624,28 +1431,25 @@ public class BKDWriter implements Closeable {
         commonPrefixLen = bytesPerDim;
       }
 
-      byte[] splitValue = radixSelector.select(points, slices, points.start, points.start + points.count,  points.start + leftCount, splitDim, commonPrefixLen);
+      radixSelector.select(points, slices, points.start, points.start + points.count,  points.start + leftCount, splitDim, commonPrefixLen);
 
-      int address = nodeID * (1 + bytesPerDim);
-      splitPackedValues[address] = (byte) splitDim;
-      System.arraycopy(splitValue, 0, splitPackedValues, address + 1, bytesPerDim);
-
-      parentSplits[splitDim]++;
-      // Recurse on left tree:
       byte[] minLeftPackedValue = new byte[packedIndexBytesLength];
       byte[] maxLeftPackedValue = new byte[packedIndexBytesLength];
       computePackedValueBounds(slices[0], minLeftPackedValue, maxLeftPackedValue);
-      build(2 * nodeID, leafNodeOffset, slices[0],
-          out, radixSelector, minLeftPackedValue, maxLeftPackedValue,
-          parentSplits, splitPackedValues, leafBlockFPs, spareDocIds);
 
-      // Recurse on right tree:
       byte[] minRightPackedValue = new byte[packedIndexBytesLength];
       byte[] maxRightPackedValue = new byte[packedIndexBytesLength];
       computePackedValueBounds(slices[1], minRightPackedValue, maxRightPackedValue);
+
+      parentSplits[splitDim]++;
+
+      // Recurse
+      build(2 * nodeID, leafNodeOffset, slices[0],
+          out, radixSelector, minLeftPackedValue, maxLeftPackedValue,
+          parentSplits, nodeBounds, leafBlockFPs, spareDocIds);
       build(2 * nodeID + 1, leafNodeOffset, slices[1],
-          out, radixSelector, minRightPackedValue, maxRightPackedValue
-          , parentSplits, splitPackedValues, leafBlockFPs, spareDocIds);
+          out, radixSelector, minRightPackedValue, maxRightPackedValue,
+          parentSplits, nodeBounds, leafBlockFPs, spareDocIds);
 
       parentSplits[splitDim]--;
     }

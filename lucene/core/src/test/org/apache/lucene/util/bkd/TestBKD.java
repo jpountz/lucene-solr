@@ -121,8 +121,8 @@ public class TestBKD extends LuceneTestCase {
   public void testRandomIntsNDims() throws Exception {
     int numDocs = atLeast(1000);
     try (Directory dir = getDirectory(numDocs)) {
-      int numDims = TestUtil.nextInt(random(), 1, 5);
-      int numIndexDims = TestUtil.nextInt(random(), 1, numDims);
+      int numDims = 2;//TestUtil.nextInt(random(), 1, 5);
+      int numIndexDims = 2;//TestUtil.nextInt(random(), 1, numDims);
       int maxPointsInLeafNode = TestUtil.nextInt(random(), 50, 100);
       float maxMB = (float) 3.0 + (3*random().nextFloat());
       BKDWriter w = new BKDWriter(numDocs, dir, "tmp", numDims, numIndexDims, 4, maxPointsInLeafNode, maxMB, numDocs);
@@ -222,7 +222,7 @@ public class TestBKD extends LuceneTestCase {
               for(int dim=0;dim<numIndexDims;dim++) {
                 int min = NumericUtils.sortableBytesToInt(minPacked, dim * Integer.BYTES);
                 int max = NumericUtils.sortableBytesToInt(maxPacked, dim * Integer.BYTES);
-                assert max >= min;
+                assert max >= min : min + " " + max;
 
                 if (max < queryMin[dim] || min > queryMax[dim]) {
                   return Relation.CELL_OUTSIDE_QUERY;

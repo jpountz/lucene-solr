@@ -100,7 +100,7 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
                                           maxMBSortInHeap,
                                           values.size())) {
 
-      if (values instanceof MutablePointValues) {
+      if (false && values instanceof MutablePointValues) {
         final long fp = writer.writeField(dataOut, fieldInfo.name, (MutablePointValues) values);
         if (fp != -1) {
           indexFPs.put(fieldInfo.name, fp);
@@ -152,7 +152,7 @@ public class Lucene60PointsWriter extends PointsWriter implements Closeable {
 
     for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
       if (fieldInfo.getPointDataDimensionCount() != 0) {
-        if (fieldInfo.getPointDataDimensionCount() == 1) {
+        if (false && fieldInfo.getPointDataDimensionCount() == 1) {
 
           // Worst case total maximum size (if none of the points are deleted):
           long totMaxSize = 0;

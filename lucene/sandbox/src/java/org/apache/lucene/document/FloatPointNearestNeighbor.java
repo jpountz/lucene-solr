@@ -31,7 +31,6 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.bkd.BKDReader;
 
 /**
@@ -278,24 +277,17 @@ public class FloatPointNearestNeighbor {
             }
           }
         }
-        BytesRef splitValue = BytesRef.deepCopyOf(cell.index.getSplitDimValue());
-        int splitDim = cell.index.getSplitDim();
 
         // we must clone the index so that we we can recurse left and right "concurrently":
         BKDReader.IndexTree newIndex = cell.index.clone();
-        byte[] splitPackedValue = cell.maxPacked.clone();
-        System.arraycopy(splitValue.bytes, splitValue.offset, splitPackedValue, splitDim * bytesPerDim, bytesPerDim);
 
         cell.index.pushLeft();
-        cellQueue.offer(new Cell(cell.index, cell.readerIndex, cell.minPacked, splitPackedValue,
-            approxBestDistanceSquared(cell.minPacked, splitPackedValue, origin)));
-
-        splitPackedValue = cell.minPacked.clone();
-        System.arraycopy(splitValue.bytes, splitValue.offset, splitPackedValue, splitDim * bytesPerDim, bytesPerDim);
+        cellQueue.offer(new Cell(cell.index, cell.readerIndex, cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(),
+            approxBestDistanceSquared(cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(), origin)));
 
         newIndex.pushRight();
-        cellQueue.offer(new Cell(newIndex, cell.readerIndex, splitPackedValue, cell.maxPacked,
-            approxBestDistanceSquared(splitPackedValue, cell.maxPacked, origin)));
+        cellQueue.offer(new Cell(newIndex, cell.readerIndex, cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(),
+            approxBestDistanceSquared(cell.index.getMinPackedValue().clone(), cell.index.getMaxPackedValue().clone(), origin)));
       }
     }
 
