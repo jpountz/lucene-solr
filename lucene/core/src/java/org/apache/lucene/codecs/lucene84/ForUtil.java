@@ -62,14 +62,14 @@ final class ForUtil {
     for (int i = 0; i < BLOCK_SIZE_IN_LONGS; ++i) {
       bitsLeft -= bitsPerValue;
       if (bitsLeft > 0) {
-        nextBlock |= intPairs[idx++] << bitsLeft;
+        nextBlock |= intPairs[idx]++ << bitsLeft;
       } else if (bitsLeft == 0) {
-        nextBlock |= intPairs[idx++];
+        nextBlock |= intPairs[idx]++;
         out.writeLong(nextBlock);
         nextBlock = 0;
         bitsLeft = 32;
       } else {
-        final long intPair = intPairs[idx++];
+        final long intPair = intPairs[idx]++;
         nextBlock |= (intPair >>> -bitsLeft) & mask(bitsPerValue + bitsLeft);
         out.writeLong(nextBlock);
         nextBlock = (intPair & mask(-bitsLeft)) << (32 + bitsLeft);
@@ -535,9 +535,7 @@ final class ForUtil {
       }
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_6) << 7) | ((block1 >>> 25) & MASK_7);
-      for (int shift = 12; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block1 >>> 12) & MASK_13;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_12) << 1) | ((block2 >>> 31) & MASK_1);
       for (int shift = 18; shift >= 0; shift -= 13) {
@@ -545,9 +543,7 @@ final class ForUtil {
       }
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_5) << 8) | ((block3 >>> 24) & MASK_8);
-      for (int shift = 11; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block3 >>> 11) & MASK_13;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_11) << 2) | ((block4 >>> 30) & MASK_2);
       for (int shift = 17; shift >= 0; shift -= 13) {
@@ -555,9 +551,7 @@ final class ForUtil {
       }
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_4) << 9) | ((block5 >>> 23) & MASK_9);
-      for (int shift = 10; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block5 >>> 10) & MASK_13;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_10) << 3) | ((block6 >>> 29) & MASK_3);
       for (int shift = 16; shift >= 0; shift -= 13) {
@@ -565,9 +559,7 @@ final class ForUtil {
       }
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_3) << 10) | ((block7 >>> 22) & MASK_10);
-      for (int shift = 9; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block7 >>> 9) & MASK_13;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_9) << 4) | ((block8 >>> 28) & MASK_4);
       for (int shift = 15; shift >= 0; shift -= 13) {
@@ -575,9 +567,7 @@ final class ForUtil {
       }
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_2) << 11) | ((block9 >>> 21) & MASK_11);
-      for (int shift = 8; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block9 >>> 8) & MASK_13;
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_8) << 5) | ((block10 >>> 27) & MASK_5);
       for (int shift = 14; shift >= 0; shift -= 13) {
@@ -585,9 +575,7 @@ final class ForUtil {
       }
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_1) << 12) | ((block11 >>> 20) & MASK_12);
-      for (int shift = 7; shift >= 0; shift -= 13) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_13;
-      }
+      intPairs[idx++] = (block11 >>> 7) & MASK_13;
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_7) << 6) | ((block12 >>> 26) & MASK_6);
       for (int shift = 13; shift >= 0; shift -= 13) {
@@ -605,14 +593,10 @@ final class ForUtil {
       }
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_4) << 10) | ((block1 >>> 22) & MASK_10);
-      for (int shift = 8; shift >= 0; shift -= 14) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_14;
-      }
+      intPairs[idx++] = (block1 >>> 8) & MASK_14;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_8) << 6) | ((block2 >>> 26) & MASK_6);
-      for (int shift = 12; shift >= 0; shift -= 14) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_14;
-      }
+      intPairs[idx++] = (block2 >>> 12) & MASK_14;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_12) << 2) | ((block3 >>> 30) & MASK_2);
       for (int shift = 16; shift >= 0; shift -= 14) {
@@ -620,14 +604,10 @@ final class ForUtil {
       }
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_2) << 12) | ((block4 >>> 20) & MASK_12);
-      for (int shift = 6; shift >= 0; shift -= 14) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_14;
-      }
+      intPairs[idx++] = (block4 >>> 6) & MASK_14;
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_6) << 8) | ((block5 >>> 24) & MASK_8);
-      for (int shift = 10; shift >= 0; shift -= 14) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_14;
-      }
+      intPairs[idx++] = (block5 >>> 10) & MASK_14;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_10) << 4) | ((block6 >>> 28) & MASK_4);
       for (int shift = 14; shift >= 0; shift -= 14) {
@@ -645,34 +625,22 @@ final class ForUtil {
       }
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_2) << 13) | ((block1 >>> 19) & MASK_13);
-      for (int shift = 4; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block1 >>> 4) & MASK_15;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_4) << 11) | ((block2 >>> 21) & MASK_11);
-      for (int shift = 6; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block2 >>> 6) & MASK_15;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_6) << 9) | ((block3 >>> 23) & MASK_9);
-      for (int shift = 8; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block3 >>> 8) & MASK_15;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_8) << 7) | ((block4 >>> 25) & MASK_7);
-      for (int shift = 10; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block4 >>> 10) & MASK_15;
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_10) << 5) | ((block5 >>> 27) & MASK_5);
-      for (int shift = 12; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block5 >>> 12) & MASK_15;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_12) << 3) | ((block6 >>> 29) & MASK_3);
-      for (int shift = 14; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block6 >>> 14) & MASK_15;
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_14) << 1) | ((block7 >>> 31) & MASK_1);
       for (int shift = 16; shift >= 0; shift -= 15) {
@@ -680,34 +648,22 @@ final class ForUtil {
       }
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_1) << 14) | ((block8 >>> 18) & MASK_14);
-      for (int shift = 3; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block8 >>> 3) & MASK_15;
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_3) << 12) | ((block9 >>> 20) & MASK_12);
-      for (int shift = 5; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block9 >>> 5) & MASK_15;
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_5) << 10) | ((block10 >>> 22) & MASK_10);
-      for (int shift = 7; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block10 >>> 7) & MASK_15;
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_7) << 8) | ((block11 >>> 24) & MASK_8);
-      for (int shift = 9; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block11 >>> 9) & MASK_15;
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_9) << 6) | ((block12 >>> 26) & MASK_6);
-      for (int shift = 11; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block12 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block12 >>> 11) & MASK_15;
       long block13 = in.readLong();
       intPairs[idx++] = ((block12 & MASK_11) << 4) | ((block13 >>> 28) & MASK_4);
-      for (int shift = 13; shift >= 0; shift -= 15) {
-        intPairs[idx++] = (block13 >>> shift) & MASK_15;
-      }
+      intPairs[idx++] = (block13 >>> 13) & MASK_15;
       long block14 = in.readLong();
       intPairs[idx++] = ((block13 & MASK_13) << 2) | ((block14 >>> 30) & MASK_2);
       for (int shift = 15; shift >= 0; shift -= 15) {
@@ -730,89 +686,54 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 2; ++k) {
       long block0 = in.readLong();
-      for (int shift = 15; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block0 >>> 15) & MASK_17;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_15) << 2) | ((block1 >>> 30) & MASK_2);
-      for (int shift = 13; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block1 >>> 13) & MASK_17;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_13) << 4) | ((block2 >>> 28) & MASK_4);
-      for (int shift = 11; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block2 >>> 11) & MASK_17;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_11) << 6) | ((block3 >>> 26) & MASK_6);
-      for (int shift = 9; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block3 >>> 9) & MASK_17;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_9) << 8) | ((block4 >>> 24) & MASK_8);
-      for (int shift = 7; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block4 >>> 7) & MASK_17;
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_7) << 10) | ((block5 >>> 22) & MASK_10);
-      for (int shift = 5; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block5 >>> 5) & MASK_17;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_5) << 12) | ((block6 >>> 20) & MASK_12);
-      for (int shift = 3; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block6 >>> 3) & MASK_17;
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_3) << 14) | ((block7 >>> 18) & MASK_14);
-      for (int shift = 1; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block7 >>> 1) & MASK_17;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_1) << 16) | ((block8 >>> 16) & MASK_16);
-      for (int shift = -1; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_17;
-      }
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_16) << 1) | ((block9 >>> 31) & MASK_1);
-      for (int shift = 14; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block9 >>> 14) & MASK_17;
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_14) << 3) | ((block10 >>> 29) & MASK_3);
-      for (int shift = 12; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block10 >>> 12) & MASK_17;
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_12) << 5) | ((block11 >>> 27) & MASK_5);
-      for (int shift = 10; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block11 >>> 10) & MASK_17;
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_10) << 7) | ((block12 >>> 25) & MASK_7);
-      for (int shift = 8; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block12 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block12 >>> 8) & MASK_17;
       long block13 = in.readLong();
       intPairs[idx++] = ((block12 & MASK_8) << 9) | ((block13 >>> 23) & MASK_9);
-      for (int shift = 6; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block13 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block13 >>> 6) & MASK_17;
       long block14 = in.readLong();
       intPairs[idx++] = ((block13 & MASK_6) << 11) | ((block14 >>> 21) & MASK_11);
-      for (int shift = 4; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block14 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block14 >>> 4) & MASK_17;
       long block15 = in.readLong();
       intPairs[idx++] = ((block14 & MASK_4) << 13) | ((block15 >>> 19) & MASK_13);
-      for (int shift = 2; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block15 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = (block15 >>> 2) & MASK_17;
       long block16 = in.readLong();
       intPairs[idx++] = ((block15 & MASK_2) << 15) | ((block16 >>> 17) & MASK_15);
-      for (int shift = 0; shift >= 0; shift -= 17) {
-        intPairs[idx++] = (block16 >>> shift) & MASK_17;
-      }
+      intPairs[idx++] = block16 & MASK_17;
     }
   }
 
@@ -820,49 +741,30 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 4; ++k) {
       long block0 = in.readLong();
-      for (int shift = 14; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block0 >>> 14) & MASK_18;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_14) << 4) | ((block1 >>> 28) & MASK_4);
-      for (int shift = 10; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block1 >>> 10) & MASK_18;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_10) << 8) | ((block2 >>> 24) & MASK_8);
-      for (int shift = 6; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block2 >>> 6) & MASK_18;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_6) << 12) | ((block3 >>> 20) & MASK_12);
-      for (int shift = 2; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block3 >>> 2) & MASK_18;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_2) << 16) | ((block4 >>> 16) & MASK_16);
-      for (int shift = -2; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_18;
-      }
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_16) << 2) | ((block5 >>> 30) & MASK_2);
-      for (int shift = 12; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block5 >>> 12) & MASK_18;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_12) << 6) | ((block6 >>> 26) & MASK_6);
-      for (int shift = 8; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block6 >>> 8) & MASK_18;
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_8) << 10) | ((block7 >>> 22) & MASK_10);
-      for (int shift = 4; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = (block7 >>> 4) & MASK_18;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_4) << 14) | ((block8 >>> 18) & MASK_14);
-      for (int shift = 0; shift >= 0; shift -= 18) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_18;
-      }
+      intPairs[idx++] = block8 & MASK_18;
     }
   }
 
@@ -870,99 +772,56 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 2; ++k) {
       long block0 = in.readLong();
-      for (int shift = 13; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block0 >>> 13) & MASK_19;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_13) << 6) | ((block1 >>> 26) & MASK_6);
-      for (int shift = 7; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block1 >>> 7) & MASK_19;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_7) << 12) | ((block2 >>> 20) & MASK_12);
-      for (int shift = 1; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block2 >>> 1) & MASK_19;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_1) << 18) | ((block3 >>> 14) & MASK_18);
-      for (int shift = -5; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_19;
-      }
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_14) << 5) | ((block4 >>> 27) & MASK_5);
-      for (int shift = 8; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block4 >>> 8) & MASK_19;
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_8) << 11) | ((block5 >>> 21) & MASK_11);
-      for (int shift = 2; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block5 >>> 2) & MASK_19;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_2) << 17) | ((block6 >>> 15) & MASK_17);
-      for (int shift = -4; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_19;
-      }
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_15) << 4) | ((block7 >>> 28) & MASK_4);
-      for (int shift = 9; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block7 >>> 9) & MASK_19;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_9) << 10) | ((block8 >>> 22) & MASK_10);
-      for (int shift = 3; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block8 >>> 3) & MASK_19;
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_3) << 16) | ((block9 >>> 16) & MASK_16);
-      for (int shift = -3; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_19;
-      }
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_16) << 3) | ((block10 >>> 29) & MASK_3);
-      for (int shift = 10; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block10 >>> 10) & MASK_19;
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_10) << 9) | ((block11 >>> 23) & MASK_9);
-      for (int shift = 4; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block11 >>> 4) & MASK_19;
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_4) << 15) | ((block12 >>> 17) & MASK_15);
-      for (int shift = -2; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block12 >>> shift) & MASK_19;
-      }
       long block13 = in.readLong();
       intPairs[idx++] = ((block12 & MASK_17) << 2) | ((block13 >>> 30) & MASK_2);
-      for (int shift = 11; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block13 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block13 >>> 11) & MASK_19;
       long block14 = in.readLong();
       intPairs[idx++] = ((block13 & MASK_11) << 8) | ((block14 >>> 24) & MASK_8);
-      for (int shift = 5; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block14 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block14 >>> 5) & MASK_19;
       long block15 = in.readLong();
       intPairs[idx++] = ((block14 & MASK_5) << 14) | ((block15 >>> 18) & MASK_14);
-      for (int shift = -1; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block15 >>> shift) & MASK_19;
-      }
       long block16 = in.readLong();
       intPairs[idx++] = ((block15 & MASK_18) << 1) | ((block16 >>> 31) & MASK_1);
-      for (int shift = 12; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block16 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block16 >>> 12) & MASK_19;
       long block17 = in.readLong();
       intPairs[idx++] = ((block16 & MASK_12) << 7) | ((block17 >>> 25) & MASK_7);
-      for (int shift = 6; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block17 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = (block17 >>> 6) & MASK_19;
       long block18 = in.readLong();
       intPairs[idx++] = ((block17 & MASK_6) << 13) | ((block18 >>> 19) & MASK_13);
-      for (int shift = 0; shift >= 0; shift -= 19) {
-        intPairs[idx++] = (block18 >>> shift) & MASK_19;
-      }
+      intPairs[idx++] = block18 & MASK_19;
     }
   }
 
@@ -970,29 +829,18 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 8; ++k) {
       long block0 = in.readLong();
-      for (int shift = 12; shift >= 0; shift -= 20) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_20;
-      }
+      intPairs[idx++] = (block0 >>> 12) & MASK_20;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_12) << 8) | ((block1 >>> 24) & MASK_8);
-      for (int shift = 4; shift >= 0; shift -= 20) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_20;
-      }
+      intPairs[idx++] = (block1 >>> 4) & MASK_20;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_4) << 16) | ((block2 >>> 16) & MASK_16);
-      for (int shift = -4; shift >= 0; shift -= 20) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_20;
-      }
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_16) << 4) | ((block3 >>> 28) & MASK_4);
-      for (int shift = 8; shift >= 0; shift -= 20) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_20;
-      }
+      intPairs[idx++] = (block3 >>> 8) & MASK_20;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_8) << 12) | ((block4 >>> 20) & MASK_12);
-      for (int shift = 0; shift >= 0; shift -= 20) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_20;
-      }
+      intPairs[idx++] = block4 & MASK_20;
     }
   }
 
@@ -1000,109 +848,58 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 2; ++k) {
       long block0 = in.readLong();
-      for (int shift = 11; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block0 >>> 11) & MASK_21;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_11) << 10) | ((block1 >>> 22) & MASK_10);
-      for (int shift = 1; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block1 >>> 1) & MASK_21;
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_1) << 20) | ((block2 >>> 12) & MASK_20);
-      for (int shift = -9; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_21;
-      }
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_12) << 9) | ((block3 >>> 23) & MASK_9);
-      for (int shift = 2; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block3 >>> 2) & MASK_21;
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_2) << 19) | ((block4 >>> 13) & MASK_19);
-      for (int shift = -8; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_21;
-      }
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_13) << 8) | ((block5 >>> 24) & MASK_8);
-      for (int shift = 3; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block5 >>> 3) & MASK_21;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_3) << 18) | ((block6 >>> 14) & MASK_18);
-      for (int shift = -7; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_21;
-      }
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_14) << 7) | ((block7 >>> 25) & MASK_7);
-      for (int shift = 4; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block7 >>> 4) & MASK_21;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_4) << 17) | ((block8 >>> 15) & MASK_17);
-      for (int shift = -6; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_21;
-      }
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_15) << 6) | ((block9 >>> 26) & MASK_6);
-      for (int shift = 5; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block9 >>> 5) & MASK_21;
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_5) << 16) | ((block10 >>> 16) & MASK_16);
-      for (int shift = -5; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_21;
-      }
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_16) << 5) | ((block11 >>> 27) & MASK_5);
-      for (int shift = 6; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block11 >>> 6) & MASK_21;
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_6) << 15) | ((block12 >>> 17) & MASK_15);
-      for (int shift = -4; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block12 >>> shift) & MASK_21;
-      }
       long block13 = in.readLong();
       intPairs[idx++] = ((block12 & MASK_17) << 4) | ((block13 >>> 28) & MASK_4);
-      for (int shift = 7; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block13 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block13 >>> 7) & MASK_21;
       long block14 = in.readLong();
       intPairs[idx++] = ((block13 & MASK_7) << 14) | ((block14 >>> 18) & MASK_14);
-      for (int shift = -3; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block14 >>> shift) & MASK_21;
-      }
       long block15 = in.readLong();
       intPairs[idx++] = ((block14 & MASK_18) << 3) | ((block15 >>> 29) & MASK_3);
-      for (int shift = 8; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block15 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block15 >>> 8) & MASK_21;
       long block16 = in.readLong();
       intPairs[idx++] = ((block15 & MASK_8) << 13) | ((block16 >>> 19) & MASK_13);
-      for (int shift = -2; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block16 >>> shift) & MASK_21;
-      }
       long block17 = in.readLong();
       intPairs[idx++] = ((block16 & MASK_19) << 2) | ((block17 >>> 30) & MASK_2);
-      for (int shift = 9; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block17 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block17 >>> 9) & MASK_21;
       long block18 = in.readLong();
       intPairs[idx++] = ((block17 & MASK_9) << 12) | ((block18 >>> 20) & MASK_12);
-      for (int shift = -1; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block18 >>> shift) & MASK_21;
-      }
       long block19 = in.readLong();
       intPairs[idx++] = ((block18 & MASK_20) << 1) | ((block19 >>> 31) & MASK_1);
-      for (int shift = 10; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block19 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = (block19 >>> 10) & MASK_21;
       long block20 = in.readLong();
       intPairs[idx++] = ((block19 & MASK_10) << 11) | ((block20 >>> 21) & MASK_11);
-      for (int shift = 0; shift >= 0; shift -= 21) {
-        intPairs[idx++] = (block20 >>> shift) & MASK_21;
-      }
+      intPairs[idx++] = block20 & MASK_21;
     }
   }
 
@@ -1110,59 +907,32 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 4; ++k) {
       long block0 = in.readLong();
-      for (int shift = 10; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = (block0 >>> 10) & MASK_22;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_10) << 12) | ((block1 >>> 20) & MASK_12);
-      for (int shift = -2; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_22;
-      }
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_20) << 2) | ((block2 >>> 30) & MASK_2);
-      for (int shift = 8; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = (block2 >>> 8) & MASK_22;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_8) << 14) | ((block3 >>> 18) & MASK_14);
-      for (int shift = -4; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_22;
-      }
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_18) << 4) | ((block4 >>> 28) & MASK_4);
-      for (int shift = 6; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = (block4 >>> 6) & MASK_22;
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_6) << 16) | ((block5 >>> 16) & MASK_16);
-      for (int shift = -6; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_22;
-      }
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_16) << 6) | ((block6 >>> 26) & MASK_6);
-      for (int shift = 4; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = (block6 >>> 4) & MASK_22;
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_4) << 18) | ((block7 >>> 14) & MASK_18);
-      for (int shift = -8; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_22;
-      }
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_14) << 8) | ((block8 >>> 24) & MASK_8);
-      for (int shift = 2; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = (block8 >>> 2) & MASK_22;
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_2) << 20) | ((block9 >>> 12) & MASK_20);
-      for (int shift = -10; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_22;
-      }
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_12) << 10) | ((block10 >>> 22) & MASK_10);
-      for (int shift = 0; shift >= 0; shift -= 22) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_22;
-      }
+      intPairs[idx++] = block10 & MASK_22;
     }
   }
 
@@ -1170,119 +940,60 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 2; ++k) {
       long block0 = in.readLong();
-      for (int shift = 9; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block0 >>> 9) & MASK_23;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_9) << 14) | ((block1 >>> 18) & MASK_14);
-      for (int shift = -5; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_23;
-      }
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_18) << 5) | ((block2 >>> 27) & MASK_5);
-      for (int shift = 4; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block2 >>> 4) & MASK_23;
       long block3 = in.readLong();
       intPairs[idx++] = ((block2 & MASK_4) << 19) | ((block3 >>> 13) & MASK_19);
-      for (int shift = -10; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block3 >>> shift) & MASK_23;
-      }
       long block4 = in.readLong();
       intPairs[idx++] = ((block3 & MASK_13) << 10) | ((block4 >>> 22) & MASK_10);
-      for (int shift = -1; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block4 >>> shift) & MASK_23;
-      }
       long block5 = in.readLong();
       intPairs[idx++] = ((block4 & MASK_22) << 1) | ((block5 >>> 31) & MASK_1);
-      for (int shift = 8; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block5 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block5 >>> 8) & MASK_23;
       long block6 = in.readLong();
       intPairs[idx++] = ((block5 & MASK_8) << 15) | ((block6 >>> 17) & MASK_15);
-      for (int shift = -6; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block6 >>> shift) & MASK_23;
-      }
       long block7 = in.readLong();
       intPairs[idx++] = ((block6 & MASK_17) << 6) | ((block7 >>> 26) & MASK_6);
-      for (int shift = 3; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block7 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block7 >>> 3) & MASK_23;
       long block8 = in.readLong();
       intPairs[idx++] = ((block7 & MASK_3) << 20) | ((block8 >>> 12) & MASK_20);
-      for (int shift = -11; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block8 >>> shift) & MASK_23;
-      }
       long block9 = in.readLong();
       intPairs[idx++] = ((block8 & MASK_12) << 11) | ((block9 >>> 21) & MASK_11);
-      for (int shift = -2; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block9 >>> shift) & MASK_23;
-      }
       long block10 = in.readLong();
       intPairs[idx++] = ((block9 & MASK_21) << 2) | ((block10 >>> 30) & MASK_2);
-      for (int shift = 7; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block10 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block10 >>> 7) & MASK_23;
       long block11 = in.readLong();
       intPairs[idx++] = ((block10 & MASK_7) << 16) | ((block11 >>> 16) & MASK_16);
-      for (int shift = -7; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block11 >>> shift) & MASK_23;
-      }
       long block12 = in.readLong();
       intPairs[idx++] = ((block11 & MASK_16) << 7) | ((block12 >>> 25) & MASK_7);
-      for (int shift = 2; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block12 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block12 >>> 2) & MASK_23;
       long block13 = in.readLong();
       intPairs[idx++] = ((block12 & MASK_2) << 21) | ((block13 >>> 11) & MASK_21);
-      for (int shift = -12; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block13 >>> shift) & MASK_23;
-      }
       long block14 = in.readLong();
       intPairs[idx++] = ((block13 & MASK_11) << 12) | ((block14 >>> 20) & MASK_12);
-      for (int shift = -3; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block14 >>> shift) & MASK_23;
-      }
       long block15 = in.readLong();
       intPairs[idx++] = ((block14 & MASK_20) << 3) | ((block15 >>> 29) & MASK_3);
-      for (int shift = 6; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block15 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block15 >>> 6) & MASK_23;
       long block16 = in.readLong();
       intPairs[idx++] = ((block15 & MASK_6) << 17) | ((block16 >>> 15) & MASK_17);
-      for (int shift = -8; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block16 >>> shift) & MASK_23;
-      }
       long block17 = in.readLong();
       intPairs[idx++] = ((block16 & MASK_15) << 8) | ((block17 >>> 24) & MASK_8);
-      for (int shift = 1; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block17 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block17 >>> 1) & MASK_23;
       long block18 = in.readLong();
       intPairs[idx++] = ((block17 & MASK_1) << 22) | ((block18 >>> 10) & MASK_22);
-      for (int shift = -13; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block18 >>> shift) & MASK_23;
-      }
       long block19 = in.readLong();
       intPairs[idx++] = ((block18 & MASK_10) << 13) | ((block19 >>> 19) & MASK_13);
-      for (int shift = -4; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block19 >>> shift) & MASK_23;
-      }
       long block20 = in.readLong();
       intPairs[idx++] = ((block19 & MASK_19) << 4) | ((block20 >>> 28) & MASK_4);
-      for (int shift = 5; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block20 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = (block20 >>> 5) & MASK_23;
       long block21 = in.readLong();
       intPairs[idx++] = ((block20 & MASK_5) << 18) | ((block21 >>> 14) & MASK_18);
-      for (int shift = -9; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block21 >>> shift) & MASK_23;
-      }
       long block22 = in.readLong();
       intPairs[idx++] = ((block21 & MASK_14) << 9) | ((block22 >>> 23) & MASK_9);
-      for (int shift = 0; shift >= 0; shift -= 23) {
-        intPairs[idx++] = (block22 >>> shift) & MASK_23;
-      }
+      intPairs[idx++] = block22 & MASK_23;
     }
   }
 
@@ -1290,19 +1001,12 @@ final class ForUtil {
     int idx = 0;
     for (int k = 0; k < 16; ++k) {
       long block0 = in.readLong();
-      for (int shift = 8; shift >= 0; shift -= 24) {
-        intPairs[idx++] = (block0 >>> shift) & MASK_24;
-      }
+      intPairs[idx++] = (block0 >>> 8) & MASK_24;
       long block1 = in.readLong();
       intPairs[idx++] = ((block0 & MASK_8) << 16) | ((block1 >>> 16) & MASK_16);
-      for (int shift = -8; shift >= 0; shift -= 24) {
-        intPairs[idx++] = (block1 >>> shift) & MASK_24;
-      }
       long block2 = in.readLong();
       intPairs[idx++] = ((block1 & MASK_16) << 8) | ((block2 >>> 24) & MASK_8);
-      for (int shift = 0; shift >= 0; shift -= 24) {
-        intPairs[idx++] = (block2 >>> shift) & MASK_24;
-      }
+      intPairs[idx++] = block2 & MASK_24;
     }
   }
 

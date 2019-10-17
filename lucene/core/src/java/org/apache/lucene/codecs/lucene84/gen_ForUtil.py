@@ -147,9 +147,18 @@ def writeDecode(bpv, f):
       prev_block_bits = bits_left - 32
       f.write('      intPairs[idx++] = ((block%d & MASK_%d) << %d) | ((block%d >>> %d) & MASK_%d);\n' %(i-1, prev_block_bits, bpv-prev_block_bits, i, 32-bpv+prev_block_bits, bpv-prev_block_bits))
       bits_left -= bpv
-    f.write('      for (int shift = %d; shift >= 0; shift -= %d) {\n' %(bits_left-bpv,bpv))
-    f.write('        intPairs[idx++] = (block%d >>> shift) & MASK_%d;\n' %(i, bpv))
-    f.write('      }\n')
+    if bits_left-2*bpv >= 0:
+      f.write('      for (int shift = %d; shift >= 0; shift -= %d) {\n' %(bits_left-bpv,bpv))
+      f.write('        intPairs[idx++] = (block%d >>> shift) & MASK_%d;\n' %(i, bpv))
+      f.write('      }\n')
+    else:
+      # manually unroll
+      for shift in range(bits_left-bpv, -1, -bpv):
+        if shift == 0:
+          f.write('      intPairs[idx++] = block%d & MASK_%d;\n' %(i, bpv))
+        else:
+          f.write('      intPairs[idx++] = (block%d >>> %d) & MASK_%d;\n' %(i, shift, bpv))
+
     bits_left = 32 + (bits_left % bpv)
 
   f.write('    }\n')
