@@ -17,8 +17,6 @@
 package org.apache.lucene.codecs.lucene84;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
@@ -28,6 +26,7 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.packed.PackedInts;
+import org.carrot2.mahout.math.Arrays;
 
 import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 
@@ -61,9 +60,11 @@ public class TestForUtil extends LuceneTestCase {
       final ForUtil forUtil = new ForUtil();
 
       for (int i = 0; i < iterations; ++i) {
-        ByteBuffer bb = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * 4);
-        bb.asIntBuffer().put(IntBuffer.wrap(values, i*ForUtil.BLOCK_SIZE, ForUtil.BLOCK_SIZE));
-        forUtil.encode(bb, out);
+        IntArray source = new IntArray();
+        for (int j = 0; j < ForUtil.BLOCK_SIZE; ++j) {
+          source.set(j, values[i*ForUtil.BLOCK_SIZE+j]);
+        }
+        forUtil.encode(source, out);
       }
       endPointer = out.getFilePointer();
       out.close();
@@ -78,13 +79,13 @@ public class TestForUtil extends LuceneTestCase {
           forUtil.skip(in);
           continue;
         }
-        final ByteBuffer restored = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * 4);
-        restored.mark();
+        final IntArray restored = new IntArray();
         forUtil.decode(in, restored);
-        restored.reset();
         int[] ints = new int[ForUtil.BLOCK_SIZE];
-        IntBuffer.wrap(ints).put(restored.asIntBuffer());
-        assertArrayEquals(
+        for (int j = 0; j < ForUtil.BLOCK_SIZE; ++j) {
+          ints[j] = restored.get(j);
+        }
+        assertArrayEquals(Arrays.toString(ints),
             ArrayUtil.copyOfSubArray(values, i*ForUtil.BLOCK_SIZE, (i+1)*ForUtil.BLOCK_SIZE),
             ints);
       }

@@ -25,7 +25,6 @@ import static org.apache.lucene.codecs.lucene84.Lucene84PostingsFormat.TERMS_COD
 import static org.apache.lucene.codecs.lucene84.Lucene84PostingsFormat.VERSION_CURRENT;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import org.apache.lucene.codecs.BlockTermState;
 import org.apache.lucene.codecs.CodecUtil;
@@ -67,14 +66,14 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
   private long posStartFP;
   private long payStartFP;
 
-  final ByteBuffer docDeltaBuffer;
-  final ByteBuffer freqBuffer;
+  final IntArray docDeltaBuffer;
+  final IntArray freqBuffer;
   private int docBufferUpto;
 
-  final ByteBuffer posDeltaBuffer;
-  final ByteBuffer payloadLengthBuffer;
-  final ByteBuffer offsetStartDeltaBuffer;
-  final ByteBuffer offsetLengthBuffer;
+  final IntArray posDeltaBuffer;
+  final IntArray payloadLengthBuffer;
+  final IntArray offsetStartDeltaBuffer;
+  final IntArray offsetLengthBuffer;
   private int posBufferUpto;
 
   private byte[] payloadBytes;
@@ -111,7 +110,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
                                    state.segmentInfo.getId(), state.segmentSuffix);
       forUtil = new ForUtil();
       if (state.fieldInfos.hasProx()) {
-        posDeltaBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
+        posDeltaBuffer = new IntArray();
         String posFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.POS_EXTENSION);
         posOut = state.directory.createOutput(posFileName, state.context);
         CodecUtil.writeIndexHeader(posOut, POS_CODEC, VERSION_CURRENT,
@@ -119,15 +118,15 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
 
         if (state.fieldInfos.hasPayloads()) {
           payloadBytes = new byte[128];
-          payloadLengthBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
+          payloadLengthBuffer = new IntArray();
         } else {
           payloadBytes = null;
           payloadLengthBuffer = null;
         }
 
         if (state.fieldInfos.hasOffsets()) {
-          offsetStartDeltaBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
-          offsetLengthBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
+          offsetStartDeltaBuffer = new IntArray();
+          offsetLengthBuffer = new IntArray();
         } else {
           offsetStartDeltaBuffer = null;
           offsetLengthBuffer = null;
@@ -155,8 +154,8 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       }
     }
 
-    docDeltaBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
-    freqBuffer = ByteBuffer.allocate(ForUtil.BLOCK_SIZE * Integer.BYTES);
+    docDeltaBuffer = new IntArray();
+    freqBuffer = new IntArray();
 
     // TODO: should we try skipping every 2/4 blocks...?
     skipWriter = new Lucene84SkipWriter(MAX_SKIP_LEVELS,
@@ -228,22 +227,18 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       throw new CorruptIndexException("docs out of order (" + docID + " <= " + lastDocID + " )", docOut);
     }
 
-    docDeltaBuffer.putInt(docDelta);
+    docDeltaBuffer.set(docBufferUpto, docDelta);
     if (writeFreqs) {
-      freqBuffer.putInt(termDocFreq);
+      freqBuffer.set(docBufferUpto, termDocFreq);
     }
     
     docBufferUpto++;
     docCount++;
 
     if (docBufferUpto == BLOCK_SIZE) {
-      docDeltaBuffer.position(0);
       forUtil.encode(docDeltaBuffer, docOut);
-      docDeltaBuffer.position(0);
       if (writeFreqs) {
-        freqBuffer.position(0);
         forUtil.encode(freqBuffer, docOut);
-        freqBuffer.position(0);
       }
       // NOTE: don't set docBufferUpto back to 0 here;
       // finishDoc will do so (because it needs to see that
@@ -282,13 +277,13 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     if (position < 0) {
       throw new CorruptIndexException("position=" + position + " is < 0", docOut);
     }
-    posDeltaBuffer.putInt(position - lastPosition);
+    posDeltaBuffer.set(posBufferUpto, position - lastPosition);
     if (writePayloads) {
       if (payload == null || payload.length == 0) {
         // no payload
-        payloadLengthBuffer.putInt(0);
+        payloadLengthBuffer.set(posBufferUpto, 0);
       } else {
-        payloadLengthBuffer.putInt(payload.length);
+        payloadLengthBuffer.set(posBufferUpto, payload.length);
         if (payloadByteUpto + payload.length > payloadBytes.length) {
           payloadBytes = ArrayUtil.grow(payloadBytes, payloadByteUpto + payload.length);
         }
@@ -300,33 +295,25 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     if (writeOffsets) {
       assert startOffset >= lastStartOffset;
       assert endOffset >= startOffset;
-      offsetStartDeltaBuffer.putInt(startOffset - lastStartOffset);
-      offsetLengthBuffer.putInt(endOffset - startOffset);
+      offsetStartDeltaBuffer.set(posBufferUpto, startOffset - lastStartOffset);
+      offsetLengthBuffer.set(posBufferUpto, endOffset - startOffset);
       lastStartOffset = startOffset;
     }
     
     posBufferUpto++;
     lastPosition = position;
     if (posBufferUpto == BLOCK_SIZE) {
-      posDeltaBuffer.position(0);
       forUtil.encode(posDeltaBuffer, posOut);
-      posDeltaBuffer.position(0);
 
       if (writePayloads) {
-        payloadLengthBuffer.position(0);
         forUtil.encode(payloadLengthBuffer, payOut);
-        payloadLengthBuffer.position(0);
         payOut.writeVInt(payloadByteUpto);
         payOut.writeBytes(payloadBytes, 0, payloadByteUpto);
         payloadByteUpto = 0;
       }
       if (writeOffsets) {
-        offsetStartDeltaBuffer.position(0);
         forUtil.encode(offsetStartDeltaBuffer, payOut);
-        offsetStartDeltaBuffer.position(0);
-        offsetLengthBuffer.position(0);
         forUtil.encode(offsetLengthBuffer, payOut);
-        offsetLengthBuffer.position(0);
       }
       posBufferUpto = 0;
     }
@@ -363,17 +350,15 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     
     // docFreq == 1, don't write the single docid/freq to a separate file along with a pointer to it.
     final int singletonDocID;
-    docDeltaBuffer.position(0);
-    freqBuffer.position(0);
     if (state.docFreq == 1) {
       // pulse the singleton docid into the term dictionary, freq is implicitly totalTermFreq
-      singletonDocID = docDeltaBuffer.getInt(0);
+      singletonDocID = docDeltaBuffer.get(0);
     } else {
       singletonDocID = -1;
       // vInt encode the remaining doc deltas and freqs:
       for(int i=0;i<docBufferUpto;i++) {
-        final int docDelta = docDeltaBuffer.getInt();
-        final int freq = freqBuffer.getInt();
+        final int docDelta = docDeltaBuffer.get(i);
+        final int freq = freqBuffer.get(i);
         if (!writeFreqs) {
           docOut.writeVInt(docDelta);
         } else if (freq == 1) {
@@ -384,8 +369,6 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
         }
       }
     }
-    docDeltaBuffer.position(0);
-    freqBuffer.position(0);
 
     final long lastPosBlockOffset;
 
@@ -409,18 +392,10 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
         int lastPayloadLength = -1;  // force first payload length to be written
         int lastOffsetLength = -1;   // force first offset length to be written
         int payloadBytesReadUpto = 0;
-        posDeltaBuffer.position(0);
-        if (writePayloads) {
-          payloadLengthBuffer.position(0);
-        }
-        if (writeOffsets) {
-          offsetStartDeltaBuffer.position(0);
-          offsetLengthBuffer.position(0);
-        }
         for(int i=0;i<posBufferUpto;i++) {
-          final int posDelta = posDeltaBuffer.getInt();
+          final int posDelta = posDeltaBuffer.get(i);
           if (writePayloads) {
-            final int payloadLength = payloadLengthBuffer.getInt();
+            final int payloadLength = payloadLengthBuffer.get(i);
             if (payloadLength != lastPayloadLength) {
               lastPayloadLength = payloadLength;
               posOut.writeVInt((posDelta<<1)|1);
@@ -438,8 +413,8 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
           }
 
           if (writeOffsets) {
-            int delta = offsetStartDeltaBuffer.getInt();
-            int length = offsetLengthBuffer.getInt();
+            int delta = offsetStartDeltaBuffer.get(i);
+            int length = offsetLengthBuffer.get(i);
             if (length == lastOffsetLength) {
               posOut.writeVInt(delta << 1);
             } else {
@@ -450,15 +425,9 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
           }
         }
 
-        posDeltaBuffer.position(0);
         if (writePayloads) {
-          payloadLengthBuffer.position(0);
           assert payloadBytesReadUpto == payloadByteUpto;
           payloadByteUpto = 0;
-        }
-        if (writeOffsets) {
-          offsetStartDeltaBuffer.position(0);
-          offsetLengthBuffer.position(0);
         }
       }
     } else {

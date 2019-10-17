@@ -42,7 +42,6 @@ HEADER = """// This file has been automatically generated, DO NOT EDIT
 package org.apache.lucene.codecs.lucene84;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 
 import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.DataOutput;
@@ -54,19 +53,14 @@ final class ForUtil {
 
   static final int BLOCK_SIZE = 128;
   private static final int BLOCK_SIZE_LOG2 = 7;
-  private static final int BLOCK_SIZE_IN_LONGS = 128 / 2;
+  static final int BLOCK_SIZE_IN_LONGS = 128 / 2;
 
-  private static int numBitsPerValue(ByteBuffer ints) {
-    ints.mark();
-    try {
-      int or = 0;
-      for (int i = 0; i < BLOCK_SIZE; ++i) {
-        or |= ints.getInt();
-      }
-      return PackedInts.bitsRequired(or);
-    } finally {
-      ints.reset();
+  private static int numBitsPerValue(IntArray ints) {
+    long or = 0;
+    for (long l : ints.longs) {
+      or |= l;
     }
+    return PackedInts.bitsRequired((or | (or >>> 32)) & 0xFFFFFFFFL);
   }
 
   private static long expandMask(long mask32) {
@@ -80,26 +74,28 @@ final class ForUtil {
   /**
    * Encode 128 32-bits integers from {@code data} into {@code out}.
    */
-  void encode(ByteBuffer ints, DataOutput out) throws IOException {
+  void encode(IntArray ints, DataOutput out) throws IOException {
     final int bitsPerValue = numBitsPerValue(ints);
     out.writeByte((byte) bitsPerValue);
 
+    long[] intPairs = ints.longs;
+    int idx = 0;
     long nextBlock = 0;
     int bitsLeft = 32;
     for (int i = 0; i < BLOCK_SIZE_IN_LONGS; ++i) {
       bitsLeft -= bitsPerValue;
       if (bitsLeft > 0) {
-        nextBlock |= ints.getLong() << bitsLeft;
+        nextBlock |= intPairs[idx]++ << bitsLeft;
       } else if (bitsLeft == 0) {
-        nextBlock |= ints.getLong();
+        nextBlock |= intPairs[idx]++;
         out.writeLong(nextBlock);
         nextBlock = 0;
         bitsLeft = 32;
       } else {
-        final long twoInts = ints.getLong();
-        nextBlock |= (twoInts >>> -bitsLeft) & mask(bitsPerValue + bitsLeft);
+        final long intPair = intPairs[idx]++;
+        nextBlock |= (intPair >>> -bitsLeft) & mask(bitsPerValue + bitsLeft);
         out.writeLong(nextBlock);
-        nextBlock = (twoInts & mask(-bitsLeft)) << (32 + bitsLeft);
+        nextBlock = (intPair & mask(-bitsLeft)) << (32 + bitsLeft);
         bitsLeft += 32;
       }
     }
@@ -115,19 +111,20 @@ final class ForUtil {
     in.skipBytes(numBytes);
   }
 
-  private static void decodeSlow(int bitsPerValue, DataInput in, ByteBuffer ints) throws IOException {
+  private static void decodeSlow(int bitsPerValue, DataInput in, long[] intPairs) throws IOException {
     final long mask = mask(bitsPerValue);
     long current = in.readLong();
     int bitsLeft = 32;
+    int idx = 0;
     for (int i = 0; i < BLOCK_SIZE_IN_LONGS; ++i) {
       bitsLeft -= bitsPerValue;
       if (bitsLeft < 0) {
         long next = in.readLong();
-        ints.putLong(((current & mask(bitsPerValue + bitsLeft)) << -bitsLeft) | ((next >>> (32 + bitsLeft)) & mask(-bitsLeft)));
+        intPairs[idx++] = ((current & mask(bitsPerValue + bitsLeft)) << -bitsLeft) | ((next >>> (32 + bitsLeft)) & mask(-bitsLeft));
         current = next;
         bitsLeft += 32;
       } else {
-        ints.putLong((current >>> bitsLeft) & mask);
+        intPairs[idx++] = (current >>> bitsLeft) & mask;
       }
     }
   }
@@ -135,22 +132,23 @@ final class ForUtil {
 """
 
 def writeDecode(bpv, f):
-  f.write('  private static void decode%d(DataInput in, ByteBuffer ints) throws IOException {\n' %bpv)
+  f.write('  private static void decode%d(DataInput in, long[] intPairs) throws IOException {\n' %bpv)
   num_values_per_iter = 128
   num_longs_per_iter = num_values_per_iter * bpv / 64
   while num_values_per_iter % 2 == 0 and num_longs_per_iter % 2 == 0:
     num_values_per_iter /= 2
     num_longs_per_iter /= 2
+  f.write('    int idx = 0;\n')
   f.write('    for (int k = 0; k < %d; ++k) {\n' %(128 / num_values_per_iter))
   bits_left = 32
   for i in range(num_longs_per_iter):
     f.write('      long block%d = in.readLong();\n' %i)
     if bits_left > 32:
       prev_block_bits = bits_left - 32
-      f.write('      ints.putLong(((block%d & MASK_%d) << %d) | ((block%d >>> %d) & MASK_%d));\n' %(i-1, prev_block_bits, bpv-prev_block_bits, i, 32-bpv+prev_block_bits, bpv-prev_block_bits))
+      f.write('      intPairs[idx++] = ((block%d & MASK_%d) << %d) | ((block%d >>> %d) & MASK_%d);\n' %(i-1, prev_block_bits, bpv-prev_block_bits, i, 32-bpv+prev_block_bits, bpv-prev_block_bits))
       bits_left -= bpv
     f.write('      for (int shift = %d; shift >= 0; shift -= %d) {\n' %(bits_left-bpv,bpv))
-    f.write('        ints.putLong((block%d >>> shift) & MASK_%d);\n' %(i, bpv))
+    f.write('        intPairs[idx++] = (block%d >>> shift) & MASK_%d;\n' %(i, bpv))
     f.write('      }\n')
     bits_left = 32 + (bits_left % bpv)
 
@@ -168,16 +166,16 @@ if __name__ == '__main__':
   /**
    * Decode 128 integers into {@code ints}.
    */
-  void decode(DataInput in, ByteBuffer ints) throws IOException {
+  void decode(DataInput in, IntArray ints) throws IOException {
     final int bitsPerValue = in.readByte();
     switch (bitsPerValue) {
 """)
   for i in range(1, MAX_SPECIALIZED_BITS_PER_VALUE+1):
     f.write('    case %d:\n' %i)
-    f.write('      decode%d(in, ints);\n' %i)
+    f.write('      decode%d(in, ints.longs);\n' %i)
     f.write('      break;\n')
   f.write('    default:\n')
-  f.write('      decodeSlow(bitsPerValue, in, ints);\n')
+  f.write('      decodeSlow(bitsPerValue, in, ints.longs);\n')
   f.write('      break;\n')
   f.write('    }\n')
   f.write('  }\n')
