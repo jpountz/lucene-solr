@@ -1,0 +1,447 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.lucene.codecs.lucene84;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+
+import org.apache.lucene.store.DataInput;
+import org.apache.lucene.store.DataOutput;
+import org.apache.lucene.util.packed.PackedInts;
+
+// Inspired from https://fulmicoton.com/posts/bitpacking/
+// Encodes 2 integers at once by packing them in a long.
+final class ForUtil {
+
+  static final int BLOCK_SIZE = 128;
+  private static final int BLOCK_SIZE_LOG2 = 7;
+  private static final int BLOCK_SIZE_IN_LONGS = 128 / 2;
+
+  private static int numBitsPerValue(ByteBuffer ints) {
+    ints.mark();
+    try {
+      int or = 0;
+      for (int i = 0; i < BLOCK_SIZE; ++i) {
+        or |= ints.getInt();
+      }
+      return PackedInts.bitsRequired(or);
+    } finally {
+      ints.reset();
+    }
+  }
+
+  private static long expandMask(long mask32) {
+    return mask32 | (mask32 << 32);
+  }
+
+  private static long mask(int bitsPerValue) {
+    return expandMask((1L << bitsPerValue) - 1);
+  }
+
+  /**
+   * Encode 128 32-bits integers from {@code data} into {@code out}.
+   */
+  void encode(ByteBuffer ints, DataOutput out) throws IOException {
+    final int bitsPerValue = numBitsPerValue(ints);
+    out.writeByte((byte) bitsPerValue);
+
+    long nextBlock = 0;
+    int bitsLeft = 32;
+    for (int i = 0; i < BLOCK_SIZE_IN_LONGS; ++i) {
+      bitsLeft -= bitsPerValue;
+      if (bitsLeft > 0) {
+        nextBlock |= ints.getLong() << bitsLeft;
+      } else if (bitsLeft == 0) {
+        nextBlock |= ints.getLong();
+        out.writeLong(nextBlock);
+        nextBlock = 0;
+        bitsLeft = 32;
+      } else {
+        final long twoInts = ints.getLong();
+        nextBlock |= (twoInts >>> -bitsLeft) & mask(bitsPerValue + bitsLeft); // here
+        out.writeLong(nextBlock);
+        nextBlock = (twoInts & mask(-bitsLeft)) << (32 + bitsLeft);
+        bitsLeft += 32;
+      }
+    }
+    assert bitsLeft == 32 : bitsLeft + " " + bitsPerValue;
+  }
+
+  /**
+   * Skip 128 integers.
+   */
+  void skip(DataInput in) throws IOException {
+    final int bitsPerValue = in.readByte();
+    final int numBytes = bitsPerValue << (BLOCK_SIZE_LOG2 - 3);
+    in.skipBytes(numBytes);
+  }
+
+  /**
+   * Decode 128 integers into {@code ints}.
+   */
+  void decode(DataInput in, ByteBuffer ints) throws IOException {
+    final int bitsPerValue = in.readByte();
+    switch (bitsPerValue) {
+      case 1:
+        decode1(in, ints);
+        break;
+      case 2:
+        decode2(in, ints);
+        break;
+      case 3:
+        decode3(in, ints);
+        break;
+      case 4:
+        decode4(in, ints);
+        break;
+      case 5:
+        decode5(in, ints);
+        break;
+      case 6:
+        decode6(in, ints);
+        break;
+      case 7:
+        decode7(in, ints);
+        break;
+      case 8:
+        decode8(in, ints);
+        break;
+      case 9:
+        decode9(in, ints);
+        break;
+      case 10:
+        decode10(in, ints);
+        break;
+      case 16:
+        decode16(in, ints);
+        break;
+      default:
+        decodeSlow(bitsPerValue, in, ints);
+        break;
+    }
+  }
+
+  private static final long MASK_1 = mask(1);
+
+  private static void decode1(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long current = in.readLong();
+      for (int shift = 32 - 1; shift >= 0; --shift) {
+        ints.putLong((current >>> shift) & MASK_1);
+      }
+    }
+  }
+
+  private static final long MASK_2 = mask(2);
+
+  private static void decode2(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 4; ++k) {
+      long current = in.readLong();
+      for (int shift = 32 - 2; shift >= 0; shift -= 2) {
+        ints.putLong((current >>> shift) & MASK_2);
+      }
+    }
+  }
+
+  private static final long MASK_3 = mask(3);
+
+  private static void decode3(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 3; shift >= 0; shift -= 3) {
+        ints.putLong((block0 >>> shift) & MASK_3);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_2) << 1) | ((block1 >>> 31) & MASK_1));
+      for (int shift = 32 - 1 - 3; shift >= 0; shift -= 3) {
+        ints.putLong((block1 >>> shift) & MASK_3);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_1) << 2) | ((block2 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 3; shift >= 0; shift -= 3) {
+        ints.putLong((block2 >>> shift) & MASK_3);
+      }
+    }
+  }
+
+  private static final long MASK_4 = mask(4);
+
+  private static void decode4(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 8; ++k) {
+      long current = in.readLong();
+      for (int shift = 28; shift >= 0; shift -= 4) {
+        ints.putLong((current >>> shift) & MASK_4);
+      }
+    }
+  }
+
+  private static final long MASK_5 = mask(5);
+
+  private static void decode5(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 5; shift >= 0; shift -= 5) {
+        ints.putLong((block0 >>> shift) & MASK_5);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_2) << 3) | ((block1 >>> 29) & MASK_3));
+      for (int shift = 32 - 3 - 5; shift >= 0; shift -= 5) {
+        ints.putLong((block1 >>> shift) & MASK_5);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_4) << 1) | ((block2 >>> 31) & MASK_1));
+      for (int shift = 32 - 1 - 5; shift >= 0; shift -= 5) {
+        ints.putLong((block2 >>> shift) & MASK_5);
+      }
+      long block3 = in.readLong();
+      ints.putLong(((block2 & MASK_1) << 4) | ((block3 >>> 28) & MASK_4));
+      for (int shift = 32 - 4 - 5; shift >= 0; shift -= 5) {
+        ints.putLong((block3 >>> shift) & MASK_5);
+      }
+      long block4 = in.readLong();
+      ints.putLong(((block3 & MASK_3) << 2) | ((block4 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 5; shift >= 0; shift -= 5) {
+        ints.putLong((block4 >>> shift) & MASK_5);
+      }
+    }
+  }
+
+  private static final long MASK_6 = mask(6);
+
+  private static void decode6(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 4; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 6; shift >= 0; shift -= 6) {
+        ints.putLong((block0 >>> shift) & MASK_6);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_2) << 4) | ((block1 >>> 28) & MASK_4));
+      for (int shift = 32 - 4 - 6; shift >= 0; shift -= 6) {
+        ints.putLong((block1 >>> shift) & MASK_6);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_4) << 2) | ((block2 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 6; shift >= 0; shift -= 6) {
+        ints.putLong((block2 >>> shift) & MASK_6);
+      }
+    }
+  }
+
+  private static final long MASK_7 = mask(7);
+
+  private static void decode7(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block0 >>> shift) & MASK_7);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_4) << 3) | ((block1 >>> 29) & MASK_3));
+      for (int shift = 32 - 3 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block1 >>> shift) & MASK_7);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_1) << 6) | ((block2 >>> 26) & MASK_6));
+      for (int shift = 32 - 6 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block2 >>> shift) & MASK_7);
+      }
+      long block3 = in.readLong();
+      ints.putLong(((block2 & MASK_5) << 2) | ((block3 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block3 >>> shift) & MASK_7);
+      }
+      long block4 = in.readLong();
+      ints.putLong(((block3 & MASK_2) << 5) | ((block4 >>> 27) & MASK_5));
+      for (int shift = 32 - 5 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block4 >>> shift) & MASK_7);
+      }
+      long block5 = in.readLong();
+      ints.putLong(((block4 & MASK_6) << 1) | ((block5 >>> 31) & MASK_1));
+      for (int shift = 32 - 1 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block5 >>> shift) & MASK_7);
+      }
+      long block6 = in.readLong();
+      ints.putLong(((block5 & MASK_3) << 4) | ((block6 >>> 28) & MASK_4));
+      for (int shift = 32 - 4 - 7; shift >= 0; shift -= 7) {
+        ints.putLong((block6 >>> shift) & MASK_7);
+      }
+    }
+  }
+
+  private static final long MASK_8 = mask(8);
+
+  private static void decode8(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 16; ++k) {
+      long current = in.readLong();
+      for (int shift = 24; shift >= 0; shift -= 8) {
+        ints.putLong((current >>> shift) & MASK_8);
+      }
+    }
+  }
+
+  private static final long MASK_9 = mask(9);
+
+  private static void decode9(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block0 >>> shift) & MASK_9);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_5) << 4) | ((block1 >>> 28) & MASK_4));
+      for (int shift = 32 - 4 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block1 >>> shift) & MASK_9);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_1) << 8) | ((block2 >>> 24) & MASK_8));
+      for (int shift = 32 - 8 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block2 >>> shift) & MASK_9);
+      }
+      long block3 = in.readLong();
+      ints.putLong(((block2 & MASK_6) << 3) | ((block3 >>> 29) & MASK_3));
+      for (int shift = 32 - 3 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block3 >>> shift) & MASK_9);
+      }
+      long block4 = in.readLong();
+      ints.putLong(((block3 & MASK_2) << 7) | ((block4 >>> 25) & MASK_7));
+      for (int shift = 32 - 7 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block4 >>> shift) & MASK_9);
+      }
+      long block5 = in.readLong();
+      ints.putLong(((block4 & MASK_7) << 2) | ((block5 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block5 >>> shift) & MASK_9);
+      }
+      long block6 = in.readLong();
+      ints.putLong(((block5 & MASK_3) << 6) | ((block6 >>> 26) & MASK_6));
+      for (int shift = 32 - 6 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block6 >>> shift) & MASK_9);
+      }
+      long block7 = in.readLong();
+      ints.putLong(((block6 & MASK_8) << 1) | ((block7 >>> 31) & MASK_1));
+      for (int shift = 32 - 1 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block7 >>> shift) & MASK_9);
+      }
+      long block8 = in.readLong();
+      ints.putLong(((block7 & MASK_4) << 5) | ((block8 >>> 27) & MASK_5));
+      for (int shift = 32 - 5 - 9; shift >= 0; shift -= 9) {
+        ints.putLong((block8 >>> shift) & MASK_9);
+      }
+    }
+  }
+
+  private static final long MASK_10 = mask(10);
+
+  private static void decode10(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 4; ++k) {
+      long block0 = in.readLong();
+      for (int shift = 32 - 10; shift >= 0; shift -= 10) {
+        ints.putLong((block0 >>> shift) & MASK_10);
+      }
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_2) << 8) | ((block1 >>> 24) & MASK_8));
+      for (int shift = 32 - 8 - 10; shift >= 0; shift -= 10) {
+        ints.putLong((block1 >>> shift) & MASK_10);
+      }
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_4) << 6) | ((block2 >>> 26) & MASK_6));
+      for (int shift = 32 - 6 - 10; shift >= 0; shift -= 10) {
+        ints.putLong((block2 >>> shift) & MASK_10);
+      }
+      long block3 = in.readLong();
+      ints.putLong(((block2 & MASK_6) << 4) | ((block3 >>> 28) & MASK_4));
+      for (int shift = 32 - 4 - 10; shift >= 0; shift -= 10) {
+        ints.putLong((block3 >>> shift) & MASK_10);
+      }
+      long block4 = in.readLong();
+      ints.putLong(((block3 & MASK_8) << 2) | ((block4 >>> 30) & MASK_2));
+      for (int shift = 32 - 2 - 10; shift >= 0; shift -= 10) {
+        ints.putLong((block4 >>> shift) & MASK_10);
+      }
+    }
+  }
+
+  private static final long MASK_11 = mask(11);
+
+  private static void decode11(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 2; ++k) {
+      long block0 = in.readLong();
+      ints.putLong((block0 >>> (32-11)) & MASK_11);
+      ints.putLong((block0 >>> (32-22)) & MASK_11);
+      long block1 = in.readLong();
+      ints.putLong(((block0 & MASK_10) << 1) | ((block1 >>> 31) & MASK_1));
+      ints.putLong((block1 >>> (32-1-11)) & MASK_11);
+      ints.putLong((block1 >>> (32-1-22)) & MASK_11);
+      long block2 = in.readLong();
+      ints.putLong(((block1 & MASK_9) << 2) | ((block2 >>> 30) & MASK_2));
+      ints.putLong((block2 >>> (32-2-11)) & MASK_11);
+      ints.putLong((block2 >>> (32-2-22)) & MASK_11);
+      long block3 = in.readLong();
+      ints.putLong(((block2 & MASK_8) << 3) | ((block3 >>> 29) & MASK_3));
+      ints.putLong((block3 >>> (32-3-11)) & MASK_11);
+      ints.putLong((block3 >>> (32-3-22)) & MASK_11);
+      long block4 = in.readLong();
+      ints.putLong(((block3 & MASK_7) << 4) | ((block4 >>> 28) & MASK_4));
+      ints.putLong((block4 >>> (32-4-11)) & MASK_11);
+      ints.putLong((block4 >>> (32-4-22)) & MASK_11);
+      long block5 = in.readLong();
+      ints.putLong(((block4 & MASK_6) << 5) | ((block5 >>> 27) & MASK_5));
+      ints.putLong((block5 >>> (32-5-11)) & MASK_11);
+      ints.putLong((block5 >>> (32-5-22)) & MASK_11);
+      long block6 = in.readLong();
+      ints.putLong(((block5 & MASK_5) << 6) | ((block6 >>> 26) & MASK_6));
+      ints.putLong((block6 >>> (32-6-11)) & MASK_11);
+      ints.putLong((block6 >>> (32-6-22)) & MASK_11);
+      long block7 = in.readLong();
+      ints.putLong(((block6 & MASK_4) << 7) | ((block7 >>> 25) & MASK_7));
+      ints.putLong((block7 >>> (32-7-11)) & MASK_11);
+      ints.putLong((block7 >>> (32-7-22)) & MASK_11);
+      long block8 = in.readLong();
+      ints.putLong(((block7 & MASK_3) << 8) | ((block8 >>> 24) & MASK_8));
+      ints.putLong((block7 >>> (32-8-11)) & MASK_11);
+      ints.putLong((block7 >>> (32-8-22)) & MASK_11);
+    }
+  }
+
+  private static final long MASK_16 = mask(16);
+
+  private static void decode16(DataInput in, ByteBuffer ints) throws IOException {
+    for (int k = 0; k < 32; ++k) {
+      long current = in.readLong();
+      ints.putLong((current >>> 16) & MASK_16);
+      ints.putLong(current & MASK_16);
+    }
+  }
+
+  private static void decodeSlow(int bitsPerValue, DataInput in, ByteBuffer ints) throws IOException {
+    final long mask = mask(bitsPerValue);
+    long current = in.readLong();
+    int bitsLeft = 32;
+    for (int i = 0; i < BLOCK_SIZE_IN_LONGS; ++i) {
+      bitsLeft -= bitsPerValue;
+      if (bitsLeft < 0) {
+        long next = in.readLong();
+        ints.putLong(((current & mask(bitsPerValue + bitsLeft)) << -bitsLeft) | ((next >>> (32 + bitsLeft)) & mask(-bitsLeft)));
+        current = next;
+        bitsLeft += 32;
+      } else {
+        ints.putLong((current >>> bitsLeft) & mask);
+      }
+    }
+  }
+
+}
