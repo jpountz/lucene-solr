@@ -18,6 +18,8 @@ package org.apache.lucene.codecs.lucene84;
 
 import java.io.IOException;
 
+import org.apache.lucene.store.ByteArrayDataInput;
+import org.apache.lucene.store.ByteArrayDataOutput;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
@@ -60,9 +62,9 @@ public class TestForUtil extends LuceneTestCase {
       final ForUtil forUtil = new ForUtil();
 
       for (int i = 0; i < iterations; ++i) {
-        IntArray source = new IntArray();
+        long[] source = new long[ForUtil.BLOCK_SIZE];
         for (int j = 0; j < ForUtil.BLOCK_SIZE; ++j) {
-          source.set(j, values[i*ForUtil.BLOCK_SIZE+j]);
+          source[j] = values[i*ForUtil.BLOCK_SIZE+j];
         }
         forUtil.encode(source, out);
       }
@@ -79,11 +81,11 @@ public class TestForUtil extends LuceneTestCase {
           forUtil.skip(in);
           continue;
         }
-        final IntArray restored = new IntArray();
+        final long[] restored = new long[ForUtil.BLOCK_SIZE];
         forUtil.decode(in, restored);
         int[] ints = new int[ForUtil.BLOCK_SIZE];
         for (int j = 0; j < ForUtil.BLOCK_SIZE; ++j) {
-          ints[j] = restored.get(j);
+          ints[j] = Math.toIntExact(restored[j]);
         }
         assertArrayEquals(Arrays.toString(ints),
             ArrayUtil.copyOfSubArray(values, i*ForUtil.BLOCK_SIZE, (i+1)*ForUtil.BLOCK_SIZE),
@@ -94,6 +96,23 @@ public class TestForUtil extends LuceneTestCase {
     }
 
     d.close();
+  }
+
+  public static void main(String[] args) throws IOException {
+    long[] l = new long[128];
+    for (int i = 0; i < 128; ++i) {
+      l[i] = 1 + (i & 3);
+    }
+    l[0] = Integer.MAX_VALUE;
+    System.out.println(Arrays.toString(l));
+    ForUtil f = new ForUtil();
+    byte[] b = new byte[128*4];
+    ByteArrayDataOutput out = new ByteArrayDataOutput(b);
+    f.encode(l, out);
+    ByteArrayDataInput in = new ByteArrayDataInput(b);
+    long[] restored = new long[128];
+    f.decode(in, restored);
+    System.out.println(Arrays.toString(restored));
   }
 
 }

@@ -66,14 +66,14 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
   private long posStartFP;
   private long payStartFP;
 
-  final IntArray docDeltaBuffer;
-  final IntArray freqBuffer;
+  final long[] docDeltaBuffer;
+  final long[] freqBuffer;
   private int docBufferUpto;
 
-  final IntArray posDeltaBuffer;
-  final IntArray payloadLengthBuffer;
-  final IntArray offsetStartDeltaBuffer;
-  final IntArray offsetLengthBuffer;
+  final long[] posDeltaBuffer;
+  final long[] payloadLengthBuffer;
+  final long[] offsetStartDeltaBuffer;
+  final long[] offsetLengthBuffer;
   private int posBufferUpto;
 
   private byte[] payloadBytes;
@@ -110,7 +110,7 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
                                    state.segmentInfo.getId(), state.segmentSuffix);
       forUtil = new ForUtil();
       if (state.fieldInfos.hasProx()) {
-        posDeltaBuffer = new IntArray();
+        posDeltaBuffer = new long[BLOCK_SIZE];
         String posFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, Lucene84PostingsFormat.POS_EXTENSION);
         posOut = state.directory.createOutput(posFileName, state.context);
         CodecUtil.writeIndexHeader(posOut, POS_CODEC, VERSION_CURRENT,
@@ -118,15 +118,15 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
 
         if (state.fieldInfos.hasPayloads()) {
           payloadBytes = new byte[128];
-          payloadLengthBuffer = new IntArray();
+          payloadLengthBuffer = new long[BLOCK_SIZE];
         } else {
           payloadBytes = null;
           payloadLengthBuffer = null;
         }
 
         if (state.fieldInfos.hasOffsets()) {
-          offsetStartDeltaBuffer = new IntArray();
-          offsetLengthBuffer = new IntArray();
+          offsetStartDeltaBuffer = new long[BLOCK_SIZE];
+          offsetLengthBuffer = new long[BLOCK_SIZE];
         } else {
           offsetStartDeltaBuffer = null;
           offsetLengthBuffer = null;
@@ -154,8 +154,8 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       }
     }
 
-    docDeltaBuffer = new IntArray();
-    freqBuffer = new IntArray();
+    docDeltaBuffer = new long[BLOCK_SIZE];
+    freqBuffer = new long[BLOCK_SIZE];
 
     // TODO: should we try skipping every 2/4 blocks...?
     skipWriter = new Lucene84SkipWriter(MAX_SKIP_LEVELS,
@@ -227,9 +227,9 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
       throw new CorruptIndexException("docs out of order (" + docID + " <= " + lastDocID + " )", docOut);
     }
 
-    docDeltaBuffer.set(docBufferUpto, docDelta);
+    docDeltaBuffer[docBufferUpto] = docDelta;
     if (writeFreqs) {
-      freqBuffer.set(docBufferUpto, termDocFreq);
+      freqBuffer[docBufferUpto] = termDocFreq;
     }
     
     docBufferUpto++;
@@ -277,13 +277,13 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     if (position < 0) {
       throw new CorruptIndexException("position=" + position + " is < 0", docOut);
     }
-    posDeltaBuffer.set(posBufferUpto, position - lastPosition);
+    posDeltaBuffer[posBufferUpto] = position - lastPosition;
     if (writePayloads) {
       if (payload == null || payload.length == 0) {
         // no payload
-        payloadLengthBuffer.set(posBufferUpto, 0);
+        payloadLengthBuffer[posBufferUpto] = 0;
       } else {
-        payloadLengthBuffer.set(posBufferUpto, payload.length);
+        payloadLengthBuffer[posBufferUpto] = payload.length;
         if (payloadByteUpto + payload.length > payloadBytes.length) {
           payloadBytes = ArrayUtil.grow(payloadBytes, payloadByteUpto + payload.length);
         }
@@ -295,8 +295,8 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     if (writeOffsets) {
       assert startOffset >= lastStartOffset;
       assert endOffset >= startOffset;
-      offsetStartDeltaBuffer.set(posBufferUpto, startOffset - lastStartOffset);
-      offsetLengthBuffer.set(posBufferUpto, endOffset - startOffset);
+      offsetStartDeltaBuffer[posBufferUpto] = startOffset - lastStartOffset;
+      offsetLengthBuffer[posBufferUpto] = endOffset - startOffset;
       lastStartOffset = startOffset;
     }
     
@@ -352,13 +352,13 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
     final int singletonDocID;
     if (state.docFreq == 1) {
       // pulse the singleton docid into the term dictionary, freq is implicitly totalTermFreq
-      singletonDocID = docDeltaBuffer.get(0);
+      singletonDocID = (int) docDeltaBuffer[0];
     } else {
       singletonDocID = -1;
       // vInt encode the remaining doc deltas and freqs:
       for(int i=0;i<docBufferUpto;i++) {
-        final int docDelta = docDeltaBuffer.get(i);
-        final int freq = freqBuffer.get(i);
+        final int docDelta = (int) docDeltaBuffer[i];
+        final int freq = (int) freqBuffer[i];
         if (!writeFreqs) {
           docOut.writeVInt(docDelta);
         } else if (freq == 1) {
@@ -393,9 +393,9 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
         int lastOffsetLength = -1;   // force first offset length to be written
         int payloadBytesReadUpto = 0;
         for(int i=0;i<posBufferUpto;i++) {
-          final int posDelta = posDeltaBuffer.get(i);
+          final int posDelta = (int) posDeltaBuffer[i];
           if (writePayloads) {
-            final int payloadLength = payloadLengthBuffer.get(i);
+            final int payloadLength = (int) payloadLengthBuffer[i];
             if (payloadLength != lastPayloadLength) {
               lastPayloadLength = payloadLength;
               posOut.writeVInt((posDelta<<1)|1);
@@ -413,8 +413,8 @@ public final class Lucene84PostingsWriter extends PushPostingsWriterBase {
           }
 
           if (writeOffsets) {
-            int delta = offsetStartDeltaBuffer.get(i);
-            int length = offsetLengthBuffer.get(i);
+            int delta = (int) offsetStartDeltaBuffer[i];
+            int length = (int) offsetLengthBuffer[i];
             if (length == lastOffsetLength) {
               posOut.writeVInt(delta << 1);
             } else {
