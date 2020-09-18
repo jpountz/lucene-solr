@@ -79,6 +79,7 @@ final class SortingTermVectorsConsumer extends TermVectorsConsumer {
       tmpDirectory = new TrackingTmpOutputDirectoryWrapper(directory);
       writer = TEMP_TERM_VECTORS_FORMAT.vectorsWriter(tmpDirectory, info, context);
       lastDocID = 0;
+      ramBytesUsed = writer.ramBytesUsed();
     }
   }
 

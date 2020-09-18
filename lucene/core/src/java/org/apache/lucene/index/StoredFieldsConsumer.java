@@ -26,15 +26,13 @@ import org.apache.lucene.store.IOContext;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 
-class StoredFieldsConsumer {
+class StoredFieldsConsumer implements Accountable {
   final Codec codec;
   final Directory directory;
   final SegmentInfo info;
   StoredFieldsWriter writer;
-  // this accountable either holds the writer or one that returns null.
-  // it's cleaner than checking if the writer is null all over the place
-  Accountable accountable = Accountable.NULL_ACCOUNTABLE;
   private int lastDoc;
+  protected volatile long ramBytesUsed;
 
   StoredFieldsConsumer(Codec codec, Directory directory, SegmentInfo info) {
     this.codec = codec;
@@ -46,7 +44,7 @@ class StoredFieldsConsumer {
   protected void initStoredFieldsWriter() throws IOException {
     if (writer == null) { // TODO can we allocate this in the ctor? we call start document for every doc anyway
       this.writer = codec.storedFieldsFormat().fieldsWriter(directory, info, IOContext.DEFAULT);
-      accountable = writer;
+      ramBytesUsed = writer.ramBytesUsed();
     }
   }
 
@@ -66,6 +64,7 @@ class StoredFieldsConsumer {
 
   void finishDocument() throws IOException {
     writer.finishDocument();
+    ramBytesUsed = writer.ramBytesUsed();
   }
 
   void finish(int maxDoc) throws IOException {
@@ -86,5 +85,11 @@ class StoredFieldsConsumer {
 
   void abort() {
     IOUtils.closeWhileHandlingException(writer);
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    // This must be thread-safe.
+    return ramBytesUsed;
   }
 }

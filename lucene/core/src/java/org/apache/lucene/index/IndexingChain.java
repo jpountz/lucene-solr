@@ -794,13 +794,13 @@ final class IndexingChain implements Accountable {
 
   @Override
   public long ramBytesUsed() {
-    return bytesUsed.get() + storedFieldsConsumer.accountable.ramBytesUsed()
-        + termVectorsWriter.accountable.ramBytesUsed();
+    return bytesUsed.get() + storedFieldsConsumer.ramBytesUsed()
+        + termVectorsWriter.ramBytesUsed();
   }
 
   @Override
   public Collection<Accountable> getChildResources() {
-    return List.of(storedFieldsConsumer.accountable, termVectorsWriter.accountable);
+    return List.of(storedFieldsConsumer, termVectorsWriter);
   }
 
   /** NOTE: not static: accesses at least docState, termsHash. */

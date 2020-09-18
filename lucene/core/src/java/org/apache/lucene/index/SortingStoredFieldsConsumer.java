@@ -89,6 +89,7 @@ final class SortingStoredFieldsConsumer extends StoredFieldsConsumer {
     if (writer == null) {
       this.tmpDirectory = new TrackingTmpOutputDirectoryWrapper(directory);
       this.writer = TEMP_STORED_FIELDS_FORMAT.fieldsWriter(tmpDirectory, info, IOContext.DEFAULT);
+      ramBytesUsed = writer.ramBytesUsed();
     }
   }
 

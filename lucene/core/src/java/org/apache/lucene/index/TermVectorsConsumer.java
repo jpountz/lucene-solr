@@ -36,7 +36,7 @@ import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.IntBlockPool;
 import org.apache.lucene.util.RamUsageEstimator;
 
-class TermVectorsConsumer extends TermsHash {
+class TermVectorsConsumer extends TermsHash implements Accountable {
   protected final Directory directory;
   protected final SegmentInfo info;
   protected final Codec codec;
@@ -55,9 +55,7 @@ class TermVectorsConsumer extends TermsHash {
   private int numVectorFields;
   int lastDocID;
   private TermVectorsConsumerPerField[] perFields = new TermVectorsConsumerPerField[1];
-  // this accountable either holds the writer or one that returns null.
-  // it's cleaner than checking if the writer is null all over the place
-  Accountable accountable = Accountable.NULL_ACCOUNTABLE;
+  protected volatile long ramBytesUsed;
 
   TermVectorsConsumer(final IntBlockPool.Allocator intBlockAllocator, final ByteBlockPool.Allocator byteBlockAllocator, Directory directory, SegmentInfo info, Codec codec) {
     super(intBlockAllocator, byteBlockAllocator, Counter.newCounter(), null);
@@ -97,7 +95,7 @@ class TermVectorsConsumer extends TermsHash {
       IOContext context = new IOContext(new FlushInfo(lastDocID, bytesUsed.get()));
       writer = codec.termVectorsFormat().vectorsWriter(directory, info, context);
       lastDocID = 0;
-      accountable = writer;
+      ramBytesUsed = writer.ramBytesUsed();
     }
   }
 
@@ -128,6 +126,7 @@ class TermVectorsConsumer extends TermsHash {
 
     super.reset();
     resetFields();
+    ramBytesUsed = writer.ramBytesUsed();
   }
 
   @Override
@@ -165,6 +164,12 @@ class TermVectorsConsumer extends TermsHash {
   void startDocument() {
     resetFields();
     numVectorFields = 0;
+  }
+
+  @Override
+  public long ramBytesUsed() {
+    // This must be thread-safe.
+    return ramBytesUsed;
   }
 
 }
